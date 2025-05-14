@@ -18,6 +18,7 @@ package plugin
 
 import (
 	"context"
+	"github.com/crossplane/crossplane-runtime/apis/proto/ess/v1alpha1"
 	"path/filepath"
 	"testing"
 
@@ -25,7 +26,6 @@ import (
 	"google.golang.org/grpc"
 
 	v1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	ess "github.com/crossplane/crossplane-runtime/apis/proto/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection/store"
 	"github.com/crossplane/crossplane-runtime/pkg/connection/store/plugin/fake"
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -42,7 +42,7 @@ var errBoom = errors.New("boom")
 func TestReadKeyValues(t *testing.T) {
 	type args struct {
 		sn     store.ScopedName
-		client ess.ExternalSecretStorePluginServiceClient
+		client v1alpha1.ExternalSecretStorePluginServiceClient
 	}
 	type want struct {
 		out *store.Secret
@@ -57,7 +57,7 @@ func TestReadKeyValues(t *testing.T) {
 			reason: "Should return a proper error if secret cannot be obtained",
 			args: args{
 				client: &fake.ExternalSecretStorePluginServiceClient{
-					GetSecretFn: func(_ context.Context, _ *ess.GetSecretRequest, _ ...grpc.CallOption) (*ess.GetSecretResponse, error) {
+					GetSecretFn: func(_ context.Context, _ *v1alpha1.GetSecretRequest, _ ...grpc.CallOption) (*v1alpha1.GetSecretResponse, error) {
 						return nil, errBoom
 					},
 				},
@@ -75,11 +75,11 @@ func TestReadKeyValues(t *testing.T) {
 					Scope: parentPath,
 				},
 				client: &fake.ExternalSecretStorePluginServiceClient{
-					GetSecretFn: func(_ context.Context, req *ess.GetSecretRequest, _ ...grpc.CallOption) (*ess.GetSecretResponse, error) {
+					GetSecretFn: func(_ context.Context, req *v1alpha1.GetSecretRequest, _ ...grpc.CallOption) (*v1alpha1.GetSecretResponse, error) {
 						if diff := cmp.Diff(filepath.Join(parentPath, secretName), req.GetSecret().GetScopedName()); diff != "" {
 							t.Errorf("r: -want, +got:\n%s", diff)
 						}
-						sec := &ess.Secret{
+						sec := &v1alpha1.Secret{
 							ScopedName: req.GetSecret().GetScopedName(),
 							Data: map[string][]byte{
 								"data1": []byte("val1"),
@@ -90,7 +90,7 @@ func TestReadKeyValues(t *testing.T) {
 								"meta2": "val2",
 							},
 						}
-						res := &ess.GetSecretResponse{
+						res := &v1alpha1.GetSecretResponse{
 							Secret: sec,
 						}
 						return res, nil
@@ -147,7 +147,7 @@ func TestReadKeyValues(t *testing.T) {
 
 func TestWriteKeyValues(t *testing.T) {
 	type args struct {
-		client ess.ExternalSecretStorePluginServiceClient
+		client v1alpha1.ExternalSecretStorePluginServiceClient
 	}
 	type want struct {
 		isChanged bool
@@ -162,7 +162,7 @@ func TestWriteKeyValues(t *testing.T) {
 			reason: "Should return a proper error if secret cannot be applied",
 			args: args{
 				client: &fake.ExternalSecretStorePluginServiceClient{
-					ApplySecretFn: func(_ context.Context, _ *ess.ApplySecretRequest, _ ...grpc.CallOption) (*ess.ApplySecretResponse, error) {
+					ApplySecretFn: func(_ context.Context, _ *v1alpha1.ApplySecretRequest, _ ...grpc.CallOption) (*v1alpha1.ApplySecretResponse, error) {
 						return nil, errBoom
 					},
 				},
@@ -176,8 +176,8 @@ func TestWriteKeyValues(t *testing.T) {
 			reason: "Should return isChanged true",
 			args: args{
 				client: &fake.ExternalSecretStorePluginServiceClient{
-					ApplySecretFn: func(_ context.Context, _ *ess.ApplySecretRequest, _ ...grpc.CallOption) (*ess.ApplySecretResponse, error) {
-						resp := &ess.ApplySecretResponse{
+					ApplySecretFn: func(_ context.Context, _ *v1alpha1.ApplySecretRequest, _ ...grpc.CallOption) (*v1alpha1.ApplySecretResponse, error) {
+						resp := &v1alpha1.ApplySecretResponse{
 							Changed: true,
 						}
 
@@ -219,7 +219,7 @@ func TestWriteKeyValues(t *testing.T) {
 
 func TestDeleteKeyValues(t *testing.T) {
 	type args struct {
-		client ess.ExternalSecretStorePluginServiceClient
+		client v1alpha1.ExternalSecretStorePluginServiceClient
 	}
 	type want struct {
 		err error
@@ -233,7 +233,7 @@ func TestDeleteKeyValues(t *testing.T) {
 			reason: "Should return a proper error if key values cannot be deleted",
 			args: args{
 				client: &fake.ExternalSecretStorePluginServiceClient{
-					DeleteKeysFn: func(_ context.Context, _ *ess.DeleteKeysRequest, _ ...grpc.CallOption) (*ess.DeleteKeysResponse, error) {
+					DeleteKeysFn: func(_ context.Context, _ *v1alpha1.DeleteKeysRequest, _ ...grpc.CallOption) (*v1alpha1.DeleteKeysResponse, error) {
 						return nil, errBoom
 					},
 				},
@@ -246,7 +246,7 @@ func TestDeleteKeyValues(t *testing.T) {
 			reason: "Should not return error",
 			args: args{
 				client: &fake.ExternalSecretStorePluginServiceClient{
-					DeleteKeysFn: func(_ context.Context, _ *ess.DeleteKeysRequest, _ ...grpc.CallOption) (*ess.DeleteKeysResponse, error) {
+					DeleteKeysFn: func(_ context.Context, _ *v1alpha1.DeleteKeysRequest, _ ...grpc.CallOption) (*v1alpha1.DeleteKeysResponse, error) {
 						return nil, nil
 					},
 				},

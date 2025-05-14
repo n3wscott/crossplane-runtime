@@ -16,31 +16,30 @@ package fake
 
 import (
 	"context"
+	"github.com/crossplane/crossplane-runtime/apis/proto/ess/v1alpha1"
 
 	"google.golang.org/grpc"
-
-	ess "github.com/crossplane/crossplane-runtime/apis/proto/v1alpha1"
 )
 
 // ExternalSecretStorePluginServiceClient is a fake ExternalSecretStorePluginServiceClient.
 type ExternalSecretStorePluginServiceClient struct {
-	GetSecretFn   func(context.Context, *ess.GetSecretRequest, ...grpc.CallOption) (*ess.GetSecretResponse, error)
-	ApplySecretFn func(context.Context, *ess.ApplySecretRequest, ...grpc.CallOption) (*ess.ApplySecretResponse, error)
-	DeleteKeysFn  func(context.Context, *ess.DeleteKeysRequest, ...grpc.CallOption) (*ess.DeleteKeysResponse, error)
-	*ess.UnimplementedExternalSecretStorePluginServiceServer
+	GetSecretFn   func(context.Context, *v1alpha1.GetSecretRequest, ...grpc.CallOption) (*v1alpha1.GetSecretResponse, error)
+	ApplySecretFn func(context.Context, *v1alpha1.ApplySecretRequest, ...grpc.CallOption) (*v1alpha1.ApplySecretResponse, error)
+	DeleteKeysFn  func(context.Context, *v1alpha1.DeleteKeysRequest, ...grpc.CallOption) (*v1alpha1.DeleteKeysResponse, error)
+	*v1alpha1.UnimplementedExternalSecretStorePluginServiceServer
 }
 
 // GetSecret returns the secret.
-func (e *ExternalSecretStorePluginServiceClient) GetSecret(ctx context.Context, req *ess.GetSecretRequest, _ ...grpc.CallOption) (*ess.GetSecretResponse, error) {
+func (e *ExternalSecretStorePluginServiceClient) GetSecret(ctx context.Context, req *v1alpha1.GetSecretRequest, _ ...grpc.CallOption) (*v1alpha1.GetSecretResponse, error) {
 	return e.GetSecretFn(ctx, req)
 }
 
 // ApplySecret applies the secret.
-func (e *ExternalSecretStorePluginServiceClient) ApplySecret(ctx context.Context, req *ess.ApplySecretRequest, _ ...grpc.CallOption) (*ess.ApplySecretResponse, error) {
+func (e *ExternalSecretStorePluginServiceClient) ApplySecret(ctx context.Context, req *v1alpha1.ApplySecretRequest, _ ...grpc.CallOption) (*v1alpha1.ApplySecretResponse, error) {
 	return e.ApplySecretFn(ctx, req)
 }
 
 // DeleteKeys deletes the secret keys.
-func (e *ExternalSecretStorePluginServiceClient) DeleteKeys(ctx context.Context, req *ess.DeleteKeysRequest, _ ...grpc.CallOption) (*ess.DeleteKeysResponse, error) {
+func (e *ExternalSecretStorePluginServiceClient) DeleteKeys(ctx context.Context, req *v1alpha1.DeleteKeysRequest, _ ...grpc.CallOption) (*v1alpha1.DeleteKeysResponse, error) {
 	return e.DeleteKeysFn(ctx, req)
 }

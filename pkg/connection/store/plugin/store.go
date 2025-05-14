@@ -20,6 +20,7 @@ package plugin
 import (
 	"context"
 	"crypto/tls"
+	"github.com/crossplane/crossplane-runtime/apis/proto/ess/v1alpha1"
 	"path/filepath"
 
 	"google.golang.org/grpc"
@@ -27,7 +28,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	v1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
-	essproto "github.com/crossplane/crossplane-runtime/apis/proto/v1alpha1"
 	"github.com/crossplane/crossplane-runtime/pkg/connection/store"
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 )
@@ -43,7 +43,7 @@ const (
 
 // SecretStore is an External Secret Store.
 type SecretStore struct {
-	client     essproto.ExternalSecretStorePluginServiceClient
+	client     v1alpha1.ExternalSecretStorePluginServiceClient
 	kubeClient client.Client
 	config     *v1.Config
 
@@ -60,7 +60,7 @@ func NewSecretStore(_ context.Context, kube client.Client, tcfg *tls.Config, cfg
 
 	return &SecretStore{
 		kubeClient:   kube,
-		client:       essproto.NewExternalSecretStorePluginServiceClient(conn),
+		client:       v1alpha1.NewExternalSecretStorePluginServiceClient(conn),
 		config:       &cfg.Plugin.ConfigRef,
 		defaultScope: cfg.DefaultScope,
 	}, nil
@@ -68,7 +68,7 @@ func NewSecretStore(_ context.Context, kube client.Client, tcfg *tls.Config, cfg
 
 // ReadKeyValues reads and returns key value pairs for a given Secret.
 func (ss *SecretStore) ReadKeyValues(ctx context.Context, n store.ScopedName, s *store.Secret) error {
-	resp, err := ss.client.GetSecret(ctx, &essproto.GetSecretRequest{Secret: &essproto.Secret{ScopedName: ss.getScopedName(n)}, Config: ss.getConfigReference()})
+	resp, err := ss.client.GetSecret(ctx, &v1alpha1.GetSecretRequest{Secret: &v1alpha1.Secret{ScopedName: ss.getScopedName(n)}, Config: ss.getConfigReference()})
 	if err != nil {
 		return errors.Wrap(err, errGet)
 	}
@@ -100,7 +100,7 @@ func (ss *SecretStore) ReadKeyValues(ctx context.Context, n store.ScopedName, s 
 
 // WriteKeyValues writes key value pairs to a given Secret.
 func (ss *SecretStore) WriteKeyValues(ctx context.Context, s *store.Secret, _ ...store.WriteOption) (changed bool, err error) {
-	sec := &essproto.Secret{}
+	sec := &v1alpha1.Secret{}
 	sec.ScopedName = ss.getScopedName(s.ScopedName)
 	sec.Data = make(map[string][]byte, len(s.Data))
 	for k, v := range s.Data {
@@ -114,7 +114,7 @@ func (ss *SecretStore) WriteKeyValues(ctx context.Context, s *store.Secret, _ ..
 		}
 	}
 
-	resp, err := ss.client.ApplySecret(ctx, &essproto.ApplySecretRequest{Secret: sec, Config: ss.getConfigReference()})
+	resp, err := ss.client.ApplySecret(ctx, &v1alpha1.ApplySecretRequest{Secret: sec, Config: ss.getConfigReference()})
 	if err != nil {
 		return false, errors.Wrap(err, errApply)
 	}
@@ -124,13 +124,13 @@ func (ss *SecretStore) WriteKeyValues(ctx context.Context, s *store.Secret, _ ..
 
 // DeleteKeyValues delete key value pairs from a given Secret.
 func (ss *SecretStore) DeleteKeyValues(ctx context.Context, s *store.Secret, _ ...store.DeleteOption) error {
-	_, err := ss.client.DeleteKeys(ctx, &essproto.DeleteKeysRequest{Secret: &essproto.Secret{ScopedName: ss.getScopedName(s.ScopedName)}, Config: ss.getConfigReference()})
+	_, err := ss.client.DeleteKeys(ctx, &v1alpha1.DeleteKeysRequest{Secret: &v1alpha1.Secret{ScopedName: ss.getScopedName(s.ScopedName)}, Config: ss.getConfigReference()})
 
 	return errors.Wrap(err, errDelete)
 }
 
-func (ss *SecretStore) getConfigReference() *essproto.ConfigReference {
-	return &essproto.ConfigReference{
+func (ss *SecretStore) getConfigReference() *v1alpha1.ConfigReference {
+	return &v1alpha1.ConfigReference{
 		ApiVersion: ss.config.APIVersion,
 		Kind:       ss.config.Kind,
 		Name:       ss.config.Name,
