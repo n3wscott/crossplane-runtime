@@ -31,35 +31,14 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ExternalService_Observe_FullMethodName = "/external.proto.v1alpha1.ExternalService/Observe"
-	ExternalService_Create_FullMethodName  = "/external.proto.v1alpha1.ExternalService/Create"
-	ExternalService_Update_FullMethodName  = "/external.proto.v1alpha1.ExternalService/Update"
-	ExternalService_Delete_FullMethodName  = "/external.proto.v1alpha1.ExternalService/Delete"
+	ExternalService_Operation_FullMethodName = "/external.proto.v1alpha1.ExternalService/Operation"
 )
 
 // ExternalServiceClient is the client API for ExternalService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ExternalServiceClient interface {
-	// Observe the external resource the supplied managed resource represents,
-	// if any. Observe implementations must not modify the external resource,
-	// but may update the supplied managed resource to reflect the state of the
-	// external resource. Status modifications are automatically persisted
-	// unless resource_late_initialized is true.
-	Observe(ctx context.Context, in *ObserveRequest, opts ...grpc.CallOption) (*ObserveResponse, error)
-	// Create an external resource per the specifications of the supplied
-	// managed resource. Called when Observe reports that the associated
-	// external resource does not exist. Create implementations may update
-	// managed resource annotations, and those updates will be persisted. All
-	// other updates will be discarded.
-	Create(ctx context.Context, in *CreateRequest, opts ...grpc.CallOption) (*CreateResponse, error)
-	// Update the external resource represented by the supplied managed
-	// resource, if necessary. Called unless Observe reports that the associated
-	// external resource is up to date.
-	Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error)
-	// Delete the external resource upon deletion of its associated managed
-	// resource. Called when the managed resource has been deleted.
-	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
+	Operation(ctx context.Context, opts ...grpc.CallOption) (ExternalService_OperationClient, error)
 }
 
 type externalServiceClient struct {
@@ -70,65 +49,42 @@ func NewExternalServiceClient(cc grpc.ClientConnInterface) ExternalServiceClient
 	return &externalServiceClient{cc}
 }
 
-func (c *externalServiceClient) Observe(ctx context.Context, in *ObserveRequest, opts ...grpc.CallOption) (*ObserveResponse, error) {
-	out := new(ObserveResponse)
-	err := c.cc.Invoke(ctx, ExternalService_Observe_FullMethodName, in, out, opts...)
+func (c *externalServiceClient) Operation(ctx context.Context, opts ...grpc.CallOption) (ExternalService_OperationClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ExternalService_ServiceDesc.Streams[0], ExternalService_Operation_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &externalServiceOperationClient{stream}
+	return x, nil
 }
 
-func (c *externalServiceClient) Create(ctx context.Context, in *CreateRequest, opts ...grpc.CallOption) (*CreateResponse, error) {
-	out := new(CreateResponse)
-	err := c.cc.Invoke(ctx, ExternalService_Create_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+type ExternalService_OperationClient interface {
+	Send(*Request) error
+	Recv() (*Response, error)
+	grpc.ClientStream
 }
 
-func (c *externalServiceClient) Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*UpdateResponse, error) {
-	out := new(UpdateResponse)
-	err := c.cc.Invoke(ctx, ExternalService_Update_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
+type externalServiceOperationClient struct {
+	grpc.ClientStream
 }
 
-func (c *externalServiceClient) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*DeleteResponse, error) {
-	out := new(DeleteResponse)
-	err := c.cc.Invoke(ctx, ExternalService_Delete_FullMethodName, in, out, opts...)
-	if err != nil {
+func (x *externalServiceOperationClient) Send(m *Request) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *externalServiceOperationClient) Recv() (*Response, error) {
+	m := new(Response)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return m, nil
 }
 
 // ExternalServiceServer is the server API for ExternalService service.
 // All implementations must embed UnimplementedExternalServiceServer
 // for forward compatibility
 type ExternalServiceServer interface {
-	// Observe the external resource the supplied managed resource represents,
-	// if any. Observe implementations must not modify the external resource,
-	// but may update the supplied managed resource to reflect the state of the
-	// external resource. Status modifications are automatically persisted
-	// unless resource_late_initialized is true.
-	Observe(context.Context, *ObserveRequest) (*ObserveResponse, error)
-	// Create an external resource per the specifications of the supplied
-	// managed resource. Called when Observe reports that the associated
-	// external resource does not exist. Create implementations may update
-	// managed resource annotations, and those updates will be persisted. All
-	// other updates will be discarded.
-	Create(context.Context, *CreateRequest) (*CreateResponse, error)
-	// Update the external resource represented by the supplied managed
-	// resource, if necessary. Called unless Observe reports that the associated
-	// external resource is up to date.
-	Update(context.Context, *UpdateRequest) (*UpdateResponse, error)
-	// Delete the external resource upon deletion of its associated managed
-	// resource. Called when the managed resource has been deleted.
-	Delete(context.Context, *DeleteRequest) (*DeleteResponse, error)
+	Operation(ExternalService_OperationServer) error
 	mustEmbedUnimplementedExternalServiceServer()
 }
 
@@ -136,17 +92,8 @@ type ExternalServiceServer interface {
 type UnimplementedExternalServiceServer struct {
 }
 
-func (UnimplementedExternalServiceServer) Observe(context.Context, *ObserveRequest) (*ObserveResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Observe not implemented")
-}
-func (UnimplementedExternalServiceServer) Create(context.Context, *CreateRequest) (*CreateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Create not implemented")
-}
-func (UnimplementedExternalServiceServer) Update(context.Context, *UpdateRequest) (*UpdateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
-}
-func (UnimplementedExternalServiceServer) Delete(context.Context, *DeleteRequest) (*DeleteResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
+func (UnimplementedExternalServiceServer) Operation(ExternalService_OperationServer) error {
+	return status.Errorf(codes.Unimplemented, "method Operation not implemented")
 }
 func (UnimplementedExternalServiceServer) mustEmbedUnimplementedExternalServiceServer() {}
 
@@ -161,76 +108,30 @@ func RegisterExternalServiceServer(s grpc.ServiceRegistrar, srv ExternalServiceS
 	s.RegisterService(&ExternalService_ServiceDesc, srv)
 }
 
-func _ExternalService_Observe_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ObserveRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ExternalServiceServer).Observe(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ExternalService_Observe_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ExternalServiceServer).Observe(ctx, req.(*ObserveRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+func _ExternalService_Operation_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ExternalServiceServer).Operation(&externalServiceOperationServer{stream})
 }
 
-func _ExternalService_Create_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(CreateRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ExternalServiceServer).Create(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ExternalService_Create_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ExternalServiceServer).Create(ctx, req.(*CreateRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+type ExternalService_OperationServer interface {
+	Send(*Response) error
+	Recv() (*Request, error)
+	grpc.ServerStream
 }
 
-func _ExternalService_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ExternalServiceServer).Update(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ExternalService_Update_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ExternalServiceServer).Update(ctx, req.(*UpdateRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+type externalServiceOperationServer struct {
+	grpc.ServerStream
 }
 
-func _ExternalService_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(DeleteRequest)
-	if err := dec(in); err != nil {
+func (x *externalServiceOperationServer) Send(m *Response) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *externalServiceOperationServer) Recv() (*Request, error) {
+	m := new(Request)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
-	if interceptor == nil {
-		return srv.(ExternalServiceServer).Delete(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: ExternalService_Delete_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ExternalServiceServer).Delete(ctx, req.(*DeleteRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return m, nil
 }
 
 // ExternalService_ServiceDesc is the grpc.ServiceDesc for ExternalService service.
@@ -239,24 +140,14 @@ func _ExternalService_Delete_Handler(srv interface{}, ctx context.Context, dec f
 var ExternalService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "external.proto.v1alpha1.ExternalService",
 	HandlerType: (*ExternalServiceServer)(nil),
-	Methods: []grpc.MethodDesc{
+	Methods:     []grpc.MethodDesc{},
+	Streams: []grpc.StreamDesc{
 		{
-			MethodName: "Observe",
-			Handler:    _ExternalService_Observe_Handler,
-		},
-		{
-			MethodName: "Create",
-			Handler:    _ExternalService_Create_Handler,
-		},
-		{
-			MethodName: "Update",
-			Handler:    _ExternalService_Update_Handler,
-		},
-		{
-			MethodName: "Delete",
-			Handler:    _ExternalService_Delete_Handler,
+			StreamName:    "Operation",
+			Handler:       _ExternalService_Operation_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
 	Metadata: "proto/external/v1alpha1/external.proto",
 }
