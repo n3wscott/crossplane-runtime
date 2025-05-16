@@ -24,7 +24,7 @@ func main() {
 
 	client := v1alpha1.NewExternalServiceClient(conn)
 
-	stream, err := client.Operation(context.Background())
+	session, err := client.Session(context.Background())
 	if err != nil {
 		log.Fatalf("error calling GetStream: %v", err)
 	}
@@ -50,11 +50,11 @@ func main() {
 			},
 		}
 
-		if err := stream.Send(op); err != nil {
+		if err := session.Send(op); err != nil {
 			panic(err)
 		}
 
-		resp, err := stream.Recv()
+		resp, err := session.Recv()
 		if err == io.EOF {
 			return
 		}
@@ -71,11 +71,11 @@ func main() {
 			},
 		}
 
-		if err := stream.Send(op); err != nil {
+		if err := session.Send(op); err != nil {
 			panic(err)
 		}
 
-		resp, err := stream.Recv()
+		resp, err := session.Recv()
 		if err == io.EOF {
 			return
 		}

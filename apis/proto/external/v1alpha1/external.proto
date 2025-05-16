@@ -16,22 +16,77 @@ syntax = "proto3";
 package external.proto.v1alpha1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/duration.proto";
 
 option go_package = "github.com/crossplane/crossplane-runtime/apis/proto/external/v1alpha1";
 
 service ExternalService {
-  rpc Operation(stream Request) returns (stream Response) {}
+  rpc Discover(DiscoveryRequest) returns (DiscoveryResponse) {}
+  rpc Session(stream Request) returns (stream Response) {}
 }
 
+message DiscoveryRequest {}
+
+message DiscoveryResponse {
+  string version = 1;
+  repeated Reconciler reconcilers = 2;
+}
+
+message Reconciler {
+  string named = 1;
+  Reference for = 2;
+  repeated Owned owns = 3;
+  repeated Watch watches = 4;
+
+  message Reference {
+    string api_version = 1;
+    string kind = 2;
+    string name = 3;
+    string namespace = 4;
+  }
+
+  message Owned {
+    Reference obj = 1;
+    // TODO: Predicates
+  }
+
+  message Watch {
+    Reference obj = 1;
+    // TODO: Predicates
+    // TODO: Projection
+  }
+
+  // TODO: Event Filter Predicates.
+
+  // --- Reconciler Options ---
+
+  int32 max_concurrent = 100; // TODO: Does 
+  google.protobuf.Duration poll_interval = 101;
+  google.protobuf.Duration session_timeout = 102;
+
+  // TODO: creation grace period
+  // TODO: Supported Management Policies.
+  // TODO: how to support poll interval hook?
+}
+
+// TODO: we might want a log streamer to store the functions logs to the reconciler.
+// TODO: audit if any providers make kube events. Those are not accounted for in this protocol.
+// TODO: the change log needs to be plumbed.
+
+
+
+
 message Request {
+  string named = 1;
+
   oneof op{
-    ConnectRequest connect=1;
+    ConnectRequest connect=10;
     // --- After Connected Requests ---
-    ObserveRequest observe=2;
-    CreateRequest create=3;
-    UpdateRequest update=4;
-    DeleteRequest delete=5;
-    DisconnectRequest disconnect=6;
+    ObserveRequest observe=11;
+    CreateRequest create=12;
+    UpdateRequest update=13;
+    DeleteRequest delete=14;
+    DisconnectRequest disconnect=15;
   }
 }
 

@@ -15,12 +15,12 @@ package remote
 
 import (
 	"context"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
 	"github.com/crossplane/crossplane-runtime/apis/proto/external/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 )
 

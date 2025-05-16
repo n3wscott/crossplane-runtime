@@ -20,7 +20,7 @@ type server struct {
 	v1alpha1.UnimplementedExternalServiceServer
 }
 
-func (s *server) Operation(stream v1alpha1.ExternalService_OperationServer) error {
+func (s *server) Session(stream v1alpha1.ExternalService_SessionServer) error {
 	clientID := []byte(uuid.NewUUID())
 	fmt.Printf("Starting Operation Instance %s\n", clientID)
 	for {

@@ -31,14 +31,16 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ExternalService_Operation_FullMethodName = "/external.proto.v1alpha1.ExternalService/Operation"
+	ExternalService_Discover_FullMethodName = "/external.proto.v1alpha1.ExternalService/Discover"
+	ExternalService_Session_FullMethodName  = "/external.proto.v1alpha1.ExternalService/Session"
 )
 
 // ExternalServiceClient is the client API for ExternalService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ExternalServiceClient interface {
-	Operation(ctx context.Context, opts ...grpc.CallOption) (ExternalService_OperationClient, error)
+	Discover(ctx context.Context, in *DiscoveryRequest, opts ...grpc.CallOption) (*DiscoveryResponse, error)
+	Session(ctx context.Context, opts ...grpc.CallOption) (ExternalService_SessionClient, error)
 }
 
 type externalServiceClient struct {
@@ -49,30 +51,39 @@ func NewExternalServiceClient(cc grpc.ClientConnInterface) ExternalServiceClient
 	return &externalServiceClient{cc}
 }
 
-func (c *externalServiceClient) Operation(ctx context.Context, opts ...grpc.CallOption) (ExternalService_OperationClient, error) {
-	stream, err := c.cc.NewStream(ctx, &ExternalService_ServiceDesc.Streams[0], ExternalService_Operation_FullMethodName, opts...)
+func (c *externalServiceClient) Discover(ctx context.Context, in *DiscoveryRequest, opts ...grpc.CallOption) (*DiscoveryResponse, error) {
+	out := new(DiscoveryResponse)
+	err := c.cc.Invoke(ctx, ExternalService_Discover_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &externalServiceOperationClient{stream}
+	return out, nil
+}
+
+func (c *externalServiceClient) Session(ctx context.Context, opts ...grpc.CallOption) (ExternalService_SessionClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ExternalService_ServiceDesc.Streams[0], ExternalService_Session_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &externalServiceSessionClient{stream}
 	return x, nil
 }
 
-type ExternalService_OperationClient interface {
+type ExternalService_SessionClient interface {
 	Send(*Request) error
 	Recv() (*Response, error)
 	grpc.ClientStream
 }
 
-type externalServiceOperationClient struct {
+type externalServiceSessionClient struct {
 	grpc.ClientStream
 }
 
-func (x *externalServiceOperationClient) Send(m *Request) error {
+func (x *externalServiceSessionClient) Send(m *Request) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *externalServiceOperationClient) Recv() (*Response, error) {
+func (x *externalServiceSessionClient) Recv() (*Response, error) {
 	m := new(Response)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -84,7 +95,8 @@ func (x *externalServiceOperationClient) Recv() (*Response, error) {
 // All implementations must embed UnimplementedExternalServiceServer
 // for forward compatibility
 type ExternalServiceServer interface {
-	Operation(ExternalService_OperationServer) error
+	Discover(context.Context, *DiscoveryRequest) (*DiscoveryResponse, error)
+	Session(ExternalService_SessionServer) error
 	mustEmbedUnimplementedExternalServiceServer()
 }
 
@@ -92,8 +104,11 @@ type ExternalServiceServer interface {
 type UnimplementedExternalServiceServer struct {
 }
 
-func (UnimplementedExternalServiceServer) Operation(ExternalService_OperationServer) error {
-	return status.Errorf(codes.Unimplemented, "method Operation not implemented")
+func (UnimplementedExternalServiceServer) Discover(context.Context, *DiscoveryRequest) (*DiscoveryResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Discover not implemented")
+}
+func (UnimplementedExternalServiceServer) Session(ExternalService_SessionServer) error {
+	return status.Errorf(codes.Unimplemented, "method Session not implemented")
 }
 func (UnimplementedExternalServiceServer) mustEmbedUnimplementedExternalServiceServer() {}
 
@@ -108,25 +123,43 @@ func RegisterExternalServiceServer(s grpc.ServiceRegistrar, srv ExternalServiceS
 	s.RegisterService(&ExternalService_ServiceDesc, srv)
 }
 
-func _ExternalService_Operation_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(ExternalServiceServer).Operation(&externalServiceOperationServer{stream})
+func _ExternalService_Discover_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DiscoveryRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExternalServiceServer).Discover(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ExternalService_Discover_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExternalServiceServer).Discover(ctx, req.(*DiscoveryRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
-type ExternalService_OperationServer interface {
+func _ExternalService_Session_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(ExternalServiceServer).Session(&externalServiceSessionServer{stream})
+}
+
+type ExternalService_SessionServer interface {
 	Send(*Response) error
 	Recv() (*Request, error)
 	grpc.ServerStream
 }
 
-type externalServiceOperationServer struct {
+type externalServiceSessionServer struct {
 	grpc.ServerStream
 }
 
-func (x *externalServiceOperationServer) Send(m *Response) error {
+func (x *externalServiceSessionServer) Send(m *Response) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *externalServiceOperationServer) Recv() (*Request, error) {
+func (x *externalServiceSessionServer) Recv() (*Request, error) {
 	m := new(Request)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -140,11 +173,16 @@ func (x *externalServiceOperationServer) Recv() (*Request, error) {
 var ExternalService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "external.proto.v1alpha1.ExternalService",
 	HandlerType: (*ExternalServiceServer)(nil),
-	Methods:     []grpc.MethodDesc{},
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Discover",
+			Handler:    _ExternalService_Discover_Handler,
+		},
+	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Operation",
-			Handler:       _ExternalService_Operation_Handler,
+			StreamName:    "Session",
+			Handler:       _ExternalService_Session_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},
