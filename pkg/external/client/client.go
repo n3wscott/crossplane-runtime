@@ -11,7 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package remote
+// Package client provides client implementations for communicating with external providers.
+package client
 
 import (
 	"context"
@@ -20,8 +21,23 @@ import (
 	"google.golang.org/grpc/credentials"
 
 	"github.com/crossplane/crossplane-runtime/apis/proto/external/v1alpha1"
+	"github.com/crossplane/crossplane-runtime/pkg/external/common"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
+)
+
+// Error strings.
+const (
+	errConnectFailed        = "failed to connect to remote provider"
+	errDisconnectFailed     = "failed to disconnect from remote provider"
+	errStreamClosed         = "stream closed unexpectedly"
+	errInvalidResponseType  = "received invalid response type from server"
+	errNoResponse           = "no response received from server"
+	errSessionStartFailed   = "failed to start gRPC session"
+	errSessionCloseFailed   = "failed to close gRPC session"
+	errSendRequestFailed    = "failed to send request to server"
+	errRecvResponseFailed   = "failed to receive response from server"
+	errConvertManagedFailed = "failed to convert managed resource"
 )
 
 // TODO(negz): Should any of these be configurable?
@@ -31,11 +47,26 @@ const (
 	lbRoundRobin = `{"loadBalancingConfig":[{"round_robin":{}}]}`
 )
 
-// A Connector produces a Client connected to a Server via gRPC. Unlike most
-// ExternalConnector implementations it doesn't create a new connection each
-// time it's called, but instead reuses the same gRPC client connection.
+// A GRPCClientFactory creates gRPC clients for different endpoints.
+type GRPCClientFactory interface {
+	// NewClient creates a new gRPC client for the given endpoint.
+	NewClient(endpoint string, opts ...grpc.DialOption) (*grpc.ClientConn, error)
+}
+
+// DefaultGRPCClientFactory is the default implementation of GRPCClientFactory.
+type DefaultGRPCClientFactory struct{}
+
+// NewClient creates a new gRPC client for the given endpoint.
+func (f *DefaultGRPCClientFactory) NewClient(endpoint string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+	return grpc.NewClient(endpoint, opts...)
+}
+
+// LegacySupport for non-streaming API (kept for backwards compatibility)
+// ---------------------------------------------------------------------
+
+// A Connector produces a Client connected to a Server via gRPC.
 type Connector struct {
-	sc v1alpha1.ExternalServiceClient
+	sc v1alpha1.ConnectedExternalServiceClient
 }
 
 // NewConnector creates a Connector that produces clients connected to a Server
@@ -48,12 +79,10 @@ func NewConnector(ctx context.Context, endpoint string, creds credentials.Transp
 		return nil, err
 	}
 
-	return &Connector{sc: v1alpha1.NewExternalServiceClient(conn)}, nil
+	return &Connector{sc: v1alpha1.NewConnectedExternalServiceClient(conn)}, nil
 }
 
-// Connect produces a Client connected to a Server via gRPC. Unlike most
-// ExternalConnector implementations it doesn't create a new connection each
-// time it's called, but instead reuses the same gRPC client connection.
+// Connect produces a Client connected to a Server via gRPC.
 func (c *Connector) Connect(ctx context.Context, mg resource.Managed) (managed.ExternalClient, error) {
 	return &Client{sc: c.sc}, nil
 }
@@ -61,12 +90,12 @@ func (c *Connector) Connect(ctx context.Context, mg resource.Managed) (managed.E
 // A Client uses a Server to observe, create, update, and delete external
 // resources.
 type Client struct {
-	sc v1alpha1.ExternalServiceClient
+	sc v1alpha1.ConnectedExternalServiceClient
 }
 
 // Observe the supplied managed resource.
 func (c *Client) Observe(ctx context.Context, mg resource.Managed) (managed.ExternalObservation, error) {
-	s, err := AsStruct(mg)
+	s, err := common.AsStruct(mg)
 	if err != nil {
 		return managed.ExternalObservation{}, err
 	}
@@ -76,7 +105,7 @@ func (c *Client) Observe(ctx context.Context, mg resource.Managed) (managed.Exte
 		return managed.ExternalObservation{}, err
 	}
 
-	if err := AsManaged(rsp.GetResource(), mg); err != nil {
+	if err := common.AsManaged(rsp.GetResource(), mg); err != nil {
 		return managed.ExternalObservation{}, err
 	}
 
@@ -92,7 +121,7 @@ func (c *Client) Observe(ctx context.Context, mg resource.Managed) (managed.Exte
 
 // Create the supplied managed resource.
 func (c *Client) Create(ctx context.Context, mg resource.Managed) (managed.ExternalCreation, error) {
-	s, err := AsStruct(mg)
+	s, err := common.AsStruct(mg)
 	if err != nil {
 		return managed.ExternalCreation{}, err
 	}
@@ -102,7 +131,7 @@ func (c *Client) Create(ctx context.Context, mg resource.Managed) (managed.Exter
 		return managed.ExternalCreation{}, err
 	}
 
-	if err := AsManaged(rsp.GetResource(), mg); err != nil {
+	if err := common.AsManaged(rsp.GetResource(), mg); err != nil {
 		return managed.ExternalCreation{}, err
 	}
 
@@ -114,7 +143,7 @@ func (c *Client) Create(ctx context.Context, mg resource.Managed) (managed.Exter
 
 // Update the supplied managed resource.
 func (c *Client) Update(ctx context.Context, mg resource.Managed) (managed.ExternalUpdate, error) {
-	s, err := AsStruct(mg)
+	s, err := common.AsStruct(mg)
 	if err != nil {
 		return managed.ExternalUpdate{}, err
 	}
@@ -124,7 +153,7 @@ func (c *Client) Update(ctx context.Context, mg resource.Managed) (managed.Exter
 		return managed.ExternalUpdate{}, err
 	}
 
-	if err := AsManaged(rsp.GetResource(), mg); err != nil {
+	if err := common.AsManaged(rsp.GetResource(), mg); err != nil {
 		return managed.ExternalUpdate{}, err
 	}
 
@@ -136,7 +165,7 @@ func (c *Client) Update(ctx context.Context, mg resource.Managed) (managed.Exter
 
 // Delete the supplied managed resource.
 func (c *Client) Delete(ctx context.Context, mg resource.Managed) (managed.ExternalDelete, error) {
-	s, err := AsStruct(mg)
+	s, err := common.AsStruct(mg)
 	if err != nil {
 		return managed.ExternalDelete{}, err
 	}
@@ -146,10 +175,15 @@ func (c *Client) Delete(ctx context.Context, mg resource.Managed) (managed.Exter
 		return managed.ExternalDelete{}, err
 	}
 
-	return managed.ExternalDelete{AdditionalDetails: rsp.AdditionalDetails}, AsManaged(rsp.GetResource(), mg)
+	if err := common.AsManaged(rsp.GetResource(), mg); err != nil {
+		return managed.ExternalDelete{}, err
+	}
+
+	return managed.ExternalDelete{AdditionalDetails: rsp.AdditionalDetails}, nil
 }
 
+// Disconnect closes the connection.
 func (c *Client) Disconnect(ctx context.Context) error {
-	//TODO implement me
-	panic("implement me")
+	// No explicit connection closing for the legacy client
+	return nil
 }

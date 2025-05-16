@@ -11,8 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package remote implements a 'remote' ExternalClient, reached via gRPC.
-package remote
+// Package common provides shared utilities for external client and server implementations.
+package common
 
 import (
 	"encoding/json"
