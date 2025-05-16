@@ -16,27 +16,29 @@ package remote
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-
 	"github.com/crossplane/crossplane-runtime/apis/proto/external/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 )
 
-// TODO(negz): Implement an ExternalServiceServer that routes to a series of
-// ExternalConnectDisconnector implementations by GVK. On each method call:
-//
-// 1. Get by GVK
-// 2. Connect
-// 3. Make call
-// 4. Disconnect
-// 5. Return response
+var _ v1alpha1.ExternalServiceServer = &StreamingServer{}
 
-var _ v1alpha1.ExternalServiceServer = &Server{}
+type StreamingServer struct {
+	v1alpha1.UnimplementedExternalServiceServer
+}
+
+func (s *StreamingServer) Discover(ctx context.Context, request *v1alpha1.DiscoveryRequest) (*v1alpha1.DiscoveryResponse, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (s *StreamingServer) Session(server v1alpha1.ExternalService_SessionServer) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+var _ v1alpha1.ConnectedExternalServiceServer = &Server{}
 
 type Server struct {
-	//v1alpha1.UnimplementedExternalServiceServer
-
-	clients map[schema.GroupVersionKind]managed.ExternalConnectDisconnecter
+	v1alpha1.UnimplementedConnectedExternalServiceServer
 }
 
 func (s Server) Observe(ctx context.Context, request *v1alpha1.ObserveRequest) (*v1alpha1.ObserveResponse, error) {
