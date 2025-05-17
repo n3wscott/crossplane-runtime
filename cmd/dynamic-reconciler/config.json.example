@@ -1,0 +1,19 @@
+{
+  "providers": [
+    {
+      "name": "example-provider",
+      "endpoint": "provider-example:50051",
+      "useSSL": false,
+      "resourceTypes": [
+        {
+          "apiVersion": "example.crossplane.io/v1alpha1",
+          "kind": "ExampleResource"
+        },
+        {
+          "apiVersion": "example.crossplane.io/v1alpha1",
+          "kind": "AnotherResource"
+        }
+      ]
+    }
+  ]
+}
