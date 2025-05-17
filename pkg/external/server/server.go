@@ -156,10 +156,6 @@ func (s *ProviderServer) Discover(_ context.Context, _ *v1alpha1.DiscoveryReques
 // RegisterWithServer registers this provider server with the given gRPC server.
 func (s *ProviderServer) RegisterWithServer(server *grpc.Server) {
 	v1alpha1.RegisterExternalServiceServer(server, s)
-	
-	// Also register the legacy server for backward compatibility
-	legacyServer := NewLegacyServer(s.scheme, s.handlers, s.log)
-	v1alpha1.RegisterConnectedExternalServiceServer(server, legacyServer)
 }
 
 // Serve starts the gRPC server on the specified address.

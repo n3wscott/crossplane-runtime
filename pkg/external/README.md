@@ -86,16 +86,12 @@ if err := providerServer.Serve(":9000"); err != nil {
 }
 ```
 
-## Streaming vs Legacy API
+## Streaming API
 
-The architecture supports two communication modes:
-
-1. **Streaming API** (Recommended): Uses bidirectional streaming gRPC to maintain a persistent connection between the reconciler and provider components. This approach has several advantages:
+The architecture uses bidirectional streaming gRPC to maintain a persistent connection between the reconciler and provider components. This approach has several advantages:
    - Lower overhead for multiple operations on the same resource
    - Maintains connection state throughout a reconciliation cycle
    - Allows for more efficient resource usage
-
-2. **Legacy API**: For backward compatibility, we also support the older non-streaming RPC interface. This allows existing providers to continue working while transitioning to the new architecture.
 
 ## Migrating from the `remote` package
 
