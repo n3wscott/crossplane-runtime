@@ -15,276 +15,273 @@ package server
 
 import (
 	"context"
-	"fmt"
-	"sync"
 
 	"github.com/crossplane/crossplane-runtime/apis/proto/external/v1alpha1"
-	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/external/common"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/pkg/errors"
 	"google.golang.org/grpc"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// LegacyServer implements the legacy ConnectedExternalService API.
-// This provides backward compatibility with the non-streaming gRPC API.
+// LegacyServer implements the non-streaming ConnectedExternalServiceServer API.
+// It provides backward compatibility for clients that don't support the streaming API.
 type LegacyServer struct {
 	v1alpha1.UnimplementedConnectedExternalServiceServer
 
-	// providerServer is the streaming server implementation
-	providerServer *ProviderServer
+	// handlers maps resource types to their respective handlers.
+	handlers TypeHandlerMap
 
-	// log is the logger to use
+	// scheme is used for managed resource encoding/decoding.
+	scheme *runtime.Scheme
+
+	// log is the server logger.
 	log logging.Logger
-
-	// connections tracks connected client resources
-	connections map[string]managed.ExternalClient
-
-	// mu protects the connections map
-	mu sync.RWMutex
 }
 
-// NewLegacyServer creates a new LegacyServer for the given ProviderServer.
-func NewLegacyServer(providerServer *ProviderServer, log logging.Logger) *LegacyServer {
+// NewLegacyServer creates a new LegacyServer with the given options.
+func NewLegacyServer(scheme *runtime.Scheme, handlers TypeHandlerMap, log logging.Logger) *LegacyServer {
 	return &LegacyServer{
-		providerServer: providerServer,
-		log:            log.WithValues("service", "legacy"),
-		connections:    make(map[string]managed.ExternalClient),
+		handlers: handlers,
+		scheme:   scheme,
+		log:      log,
 	}
 }
 
-// RegisterWithServer registers the legacy service with the given gRPC server.
-func (s *LegacyServer) RegisterWithServer(server *grpc.Server) {
-	v1alpha1.RegisterConnectedExternalServiceServer(server, s)
-}
-
-// GetHandler returns a handler for the given resource GVK.
-func (s *LegacyServer) GetHandler(ctx context.Context, gvk schema.GroupVersionKind) (managed.TypedExternalConnecter[resource.Managed], bool) {
-	s.providerServer.mu.RLock()
-	defer s.providerServer.mu.RUnlock()
-
-	handler, ok := s.providerServer.handlers[gvk]
-	return handler, ok
-}
-
-// Observe implements the legacy Observe method.
-func (s *LegacyServer) Observe(ctx context.Context, req *v1alpha1.ObserveRequest) (*v1alpha1.ObserveResponse, error) {
-	// Parse the resource and get its GVK
-	mg, gvk, err := s.providerServer.fromProtoStruct(req.Resource)
+// Observe the external resource the supplied managed resource represents.
+func (s *LegacyServer) Observe(ctx context.Context, request *v1alpha1.ObserveRequest) (*v1alpha1.ObserveResponse, error) {
+	// Convert the proto struct to a managed resource
+	mg, gvk, err := fromProtoStruct(s.scheme, request.Resource)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse resource")
+		s.log.Debug("Error converting resource", "error", err)
+		return nil, err
 	}
 
-	// Generate a connection key
-	connKey := fmt.Sprintf("%s/%p", gvk.String(), req.Resource)
+	log := s.log.WithValues("gvk", gvk.String())
 
-	// Get a client for the resource
-	client, err := s.getOrCreateClient(ctx, connKey, gvk, mg)
+	// Get the appropriate handler for this resource type
+	c, ok := s.handlers[gvk]
+	if !ok {
+		log.Debug(errNoMatchingResourceTypeHandler)
+		return nil, errors.New(errNoMatchingResourceTypeHandler)
+	}
+
+	// Connect to the external service
+	client, err := c.Connect(ctx, mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get client")
+		log.Debug("Error connecting to external service", "error", err)
+		return nil, err
 	}
 
-	// Call Observe
+	// Ensure client is disconnected when done
+	defer func() {
+		if typed, ok := client.(interface{ Disconnect(context.Context) error }); ok {
+			if err := typed.Disconnect(ctx); err != nil {
+				log.Debug("Error disconnecting client", "error", err)
+			}
+		}
+	}()
+
+	// Observe the external resource
 	observation, err := client.Observe(ctx, mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "observe failed")
+		log.Debug("Error observing external resource", "error", err)
+		return nil, err
 	}
 
-	// Convert the managed resource back to a proto struct after any possible modifications
+	// Convert the managed resource back to a proto struct
 	updatedStruct, err := common.AsStruct(mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert resource to proto struct")
+		log.Debug("Error converting resource back to proto", "error", err)
+		return nil, err
 	}
 
-	// Build and return the response
-	return &v1alpha1.ObserveResponse{
+	// Create response
+	resp := &v1alpha1.ObserveResponse{
 		Resource:                updatedStruct,
 		ConnectionDetails:       observation.ConnectionDetails,
 		ResourceExists:          observation.ResourceExists,
 		ResourceUpToDate:        observation.ResourceUpToDate,
 		ResourceLateInitialized: observation.ResourceLateInitialized,
-	}, nil
+	}
+
+	return resp, nil
 }
 
-// Create implements the legacy Create method.
-func (s *LegacyServer) Create(ctx context.Context, req *v1alpha1.CreateRequest) (*v1alpha1.CreateResponse, error) {
-	// Parse the resource and get its GVK
-	mg, gvk, err := s.providerServer.fromProtoStruct(req.Resource)
+// Create an external resource per the specifications of the supplied managed resource.
+func (s *LegacyServer) Create(ctx context.Context, request *v1alpha1.CreateRequest) (*v1alpha1.CreateResponse, error) {
+	// Convert the proto struct to a managed resource
+	mg, gvk, err := fromProtoStruct(s.scheme, request.Resource)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse resource")
+		s.log.Debug("Error converting resource", "error", err)
+		return nil, err
 	}
 
-	// Generate a connection key
-	connKey := fmt.Sprintf("%s/%p", gvk.String(), req.Resource)
+	log := s.log.WithValues("gvk", gvk.String())
 
-	// Get a client for the resource
-	client, err := s.getOrCreateClient(ctx, connKey, gvk, mg)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get client")
+	// Get the appropriate handler for this resource type
+	c, ok := s.handlers[gvk]
+	if !ok {
+		log.Debug(errNoMatchingResourceTypeHandler)
+		return nil, errors.New(errNoMatchingResourceTypeHandler)
 	}
 
-	// Call Create
+	// Connect to the external service
+	client, err := c.Connect(ctx, mg)
+	if err != nil {
+		log.Debug("Error connecting to external service", "error", err)
+		return nil, err
+	}
+
+	// Ensure client is disconnected when done
+	defer func() {
+		if typed, ok := client.(interface{ Disconnect(context.Context) error }); ok {
+			if err := typed.Disconnect(ctx); err != nil {
+				log.Debug("Error disconnecting client", "error", err)
+			}
+		}
+	}()
+
+	// Create the external resource
 	creation, err := client.Create(ctx, mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "create failed")
+		log.Debug("Error creating external resource", "error", err)
+		return nil, err
 	}
 
-	// Convert the managed resource back to a proto struct after any possible modifications
+	// Convert the managed resource back to a proto struct
 	updatedStruct, err := common.AsStruct(mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert resource to proto struct")
+		log.Debug("Error converting resource back to proto", "error", err)
+		return nil, err
 	}
 
-	// Build and return the response
-	return &v1alpha1.CreateResponse{
+	// Create response
+	resp := &v1alpha1.CreateResponse{
 		Resource:          updatedStruct,
 		ConnectionDetails: creation.ConnectionDetails,
 		AdditionalDetails: creation.AdditionalDetails,
-	}, nil
+	}
+
+	return resp, nil
 }
 
-// Update implements the legacy Update method.
-func (s *LegacyServer) Update(ctx context.Context, req *v1alpha1.UpdateRequest) (*v1alpha1.UpdateResponse, error) {
-	// Parse the resource and get its GVK
-	mg, gvk, err := s.providerServer.fromProtoStruct(req.Resource)
+// Update the external resource represented by the supplied managed resource.
+func (s *LegacyServer) Update(ctx context.Context, request *v1alpha1.UpdateRequest) (*v1alpha1.UpdateResponse, error) {
+	// Convert the proto struct to a managed resource
+	mg, gvk, err := fromProtoStruct(s.scheme, request.Resource)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse resource")
+		s.log.Debug("Error converting resource", "error", err)
+		return nil, err
 	}
 
-	// Generate a connection key
-	connKey := fmt.Sprintf("%s/%p", gvk.String(), req.Resource)
+	log := s.log.WithValues("gvk", gvk.String())
 
-	// Get a client for the resource
-	client, err := s.getOrCreateClient(ctx, connKey, gvk, mg)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get client")
+	// Get the appropriate handler for this resource type
+	c, ok := s.handlers[gvk]
+	if !ok {
+		log.Debug(errNoMatchingResourceTypeHandler)
+		return nil, errors.New(errNoMatchingResourceTypeHandler)
 	}
 
-	// Call Update
+	// Connect to the external service
+	client, err := c.Connect(ctx, mg)
+	if err != nil {
+		log.Debug("Error connecting to external service", "error", err)
+		return nil, err
+	}
+
+	// Ensure client is disconnected when done
+	defer func() {
+		if typed, ok := client.(interface{ Disconnect(context.Context) error }); ok {
+			if err := typed.Disconnect(ctx); err != nil {
+				log.Debug("Error disconnecting client", "error", err)
+			}
+		}
+	}()
+
+	// Update the external resource
 	update, err := client.Update(ctx, mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "update failed")
+		log.Debug("Error updating external resource", "error", err)
+		return nil, err
 	}
 
-	// Convert the managed resource back to a proto struct after any possible modifications
+	// Convert the managed resource back to a proto struct
 	updatedStruct, err := common.AsStruct(mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert resource to proto struct")
+		log.Debug("Error converting resource back to proto", "error", err)
+		return nil, err
 	}
 
-	// Build and return the response
-	return &v1alpha1.UpdateResponse{
+	// Create response
+	resp := &v1alpha1.UpdateResponse{
 		Resource:          updatedStruct,
 		ConnectionDetails: update.ConnectionDetails,
 		AdditionalDetails: update.AdditionalDetails,
-	}, nil
+	}
+
+	return resp, nil
 }
 
-// Delete implements the legacy Delete method.
-func (s *LegacyServer) Delete(ctx context.Context, req *v1alpha1.DeleteRequest) (*v1alpha1.DeleteResponse, error) {
-	// Parse the resource and get its GVK
-	mg, gvk, err := s.providerServer.fromProtoStruct(req.Resource)
+// Delete the external resource upon deletion of its associated managed resource.
+func (s *LegacyServer) Delete(ctx context.Context, request *v1alpha1.DeleteRequest) (*v1alpha1.DeleteResponse, error) {
+	// Convert the proto struct to a managed resource
+	mg, gvk, err := fromProtoStruct(s.scheme, request.Resource)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to parse resource")
+		s.log.Debug("Error converting resource", "error", err)
+		return nil, err
 	}
 
-	// Generate a connection key
-	connKey := fmt.Sprintf("%s/%p", gvk.String(), req.Resource)
+	log := s.log.WithValues("gvk", gvk.String())
 
-	// Get a client for the resource
-	client, err := s.getOrCreateClient(ctx, connKey, gvk, mg)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to get client")
+	// Get the appropriate handler for this resource type
+	c, ok := s.handlers[gvk]
+	if !ok {
+		log.Debug(errNoMatchingResourceTypeHandler)
+		return nil, errors.New(errNoMatchingResourceTypeHandler)
 	}
 
-	// Call Delete
+	// Connect to the external service
+	client, err := c.Connect(ctx, mg)
+	if err != nil {
+		log.Debug("Error connecting to external service", "error", err)
+		return nil, err
+	}
+
+	// Ensure client is disconnected when done
+	defer func() {
+		if typed, ok := client.(interface{ Disconnect(context.Context) error }); ok {
+			if err := typed.Disconnect(ctx); err != nil {
+				log.Debug("Error disconnecting client", "error", err)
+			}
+		}
+	}()
+
+	// Delete the external resource
 	deletion, err := client.Delete(ctx, mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "delete failed")
+		log.Debug("Error deleting external resource", "error", err)
+		return nil, err
 	}
 
-	// Disconnect the client after delete
-	s.disconnectClient(connKey)
-
-	// Convert the managed resource back to a proto struct after any possible modifications
+	// Convert the managed resource back to a proto struct
 	updatedStruct, err := common.AsStruct(mg)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to convert resource to proto struct")
+		log.Debug("Error converting resource back to proto", "error", err)
+		return nil, err
 	}
 
-	// Build and return the response
-	return &v1alpha1.DeleteResponse{
+	// Create response
+	resp := &v1alpha1.DeleteResponse{
 		Resource:          updatedStruct,
 		AdditionalDetails: deletion.AdditionalDetails,
-	}, nil
+	}
+
+	return resp, nil
 }
 
-// getOrCreateClient gets an existing client or creates a new one for the given resource.
-func (s *LegacyServer) getOrCreateClient(ctx context.Context, key string, gvk schema.GroupVersionKind, mg resource.Managed) (managed.ExternalClient, error) {
-	// First check if we already have a client for this resource
-	s.mu.RLock()
-	client, exists := s.connections[key]
-	s.mu.RUnlock()
-
-	if exists {
-		return client, nil
-	}
-
-	// If no client exists, we need to create one
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Double-check in case another goroutine created it
-	if client, exists = s.connections[key]; exists {
-		return client, nil
-	}
-
-	// Get the handler for this resource type
-	handler, ok := s.GetHandler(ctx, gvk)
-	if !ok {
-		return nil, errors.Errorf("no handler registered for resource type %s", gvk)
-	}
-
-	// Connect to the external resource
-	client, err := handler.Connect(ctx, mg)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to connect to external resource")
-	}
-
-	// Store the client for future use
-	s.connections[key] = client
-
-	return client, nil
-}
-
-// disconnectClient disconnects and removes a client from the connections map.
-func (s *LegacyServer) disconnectClient(key string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if client, exists := s.connections[key]; exists {
-		// Call Disconnect, but don't fail if it doesn't work
-		if err := client.Disconnect(context.Background()); err != nil {
-			s.log.Debug("Error disconnecting client", "key", key, "error", err)
-		}
-		delete(s.connections, key)
-	}
-}
-
-// CleanupConnections disconnects all clients and clears the connections map.
-func (s *LegacyServer) CleanupConnections() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for key, client := range s.connections {
-		// Call Disconnect, but don't fail if it doesn't work
-		if err := client.Disconnect(context.Background()); err != nil {
-			s.log.Debug("Error disconnecting client during cleanup", "key", key, "error", err)
-		}
-	}
-
-	// Clear the map
-	s.connections = make(map[string]managed.ExternalClient)
+// RegisterWithServer registers both the streaming and legacy APIs with the given gRPC server.
+func (s *LegacyServer) RegisterWithServer(server *grpc.Server) {
+	v1alpha1.RegisterConnectedExternalServiceServer(server, s)
 }

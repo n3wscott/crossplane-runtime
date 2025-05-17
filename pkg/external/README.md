@@ -9,7 +9,7 @@ The external package is organized into the following subpackages:
 - `common`: Contains shared utilities and types used by both client and server implementations.
 - `client`: Contains client-side implementations for connecting to and communicating with external providers.
 - `server`: Contains server-side implementations for external providers.
-- `remote`: Legacy package for backward compatibility. New code should use the above packages directly.
+- `remote`: **(DEPRECATED)** Legacy package for backward compatibility. This package will be removed in a future release. All code should use the above packages directly.
 
 ## Common Package
 
@@ -85,3 +85,25 @@ if err := providerServer.Serve(":9000"); err != nil {
     log.Fatal(err)
 }
 ```
+
+## Streaming vs Legacy API
+
+The architecture supports two communication modes:
+
+1. **Streaming API** (Recommended): Uses bidirectional streaming gRPC to maintain a persistent connection between the reconciler and provider components. This approach has several advantages:
+   - Lower overhead for multiple operations on the same resource
+   - Maintains connection state throughout a reconciliation cycle
+   - Allows for more efficient resource usage
+
+2. **Legacy API**: For backward compatibility, we also support the older non-streaming RPC interface. This allows existing providers to continue working while transitioning to the new architecture.
+
+## Migrating from the `remote` package
+
+To migrate from the deprecated `remote` package:
+
+1. Replace imports from `pkg/external/remote` with either `pkg/external/client` or `pkg/external/server` as appropriate
+2. Update any usage of `remote.Connector` to use `client.StreamingConnector`
+3. Update any usage of `remote.ProviderServer` to use `server.ProviderServer`
+4. Update any usage of the `remote.ConnectorManager` to use `client.ConnectorManager`
+
+After ensuring no code depends on the `remote` package, you can run the `cleanup-remote.sh` script to remove it.

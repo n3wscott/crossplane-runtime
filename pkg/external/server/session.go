@@ -69,7 +69,7 @@ func (s *ProviderServer) Session(stream v1alpha1.ExternalService_SessionServer) 
 		switch op := req.Op.(type) {
 		case *v1alpha1.Request_Connect:
 			// Convert the proto struct to a managed resource
-			mg, gvk, err := s.fromProtoStruct(op.Connect.Resource)
+			mg, gvk, err := fromProtoStruct(s.scheme, op.Connect.Resource)
 			if err != nil {
 				log.Debug("Error converting resource", "error", err)
 				return err
@@ -126,7 +126,7 @@ func (s *ProviderServer) Session(stream v1alpha1.ExternalService_SessionServer) 
 			}
 
 			// Convert the proto struct to a managed resource
-			mg, gvk, err := s.fromProtoStruct(op.Observe.Resource)
+			mg, gvk, err := fromProtoStruct(s.scheme, op.Observe.Resource)
 			if err != nil {
 				log.Debug("Error converting resource", "error", err)
 				return err
@@ -176,7 +176,7 @@ func (s *ProviderServer) Session(stream v1alpha1.ExternalService_SessionServer) 
 			}
 
 			// Convert the proto struct to a managed resource
-			mg, gvk, err := s.fromProtoStruct(op.Create.Resource)
+			mg, gvk, err := fromProtoStruct(s.scheme, op.Create.Resource)
 			if err != nil {
 				log.Debug("Error converting resource", "error", err)
 				return err
@@ -224,7 +224,7 @@ func (s *ProviderServer) Session(stream v1alpha1.ExternalService_SessionServer) 
 			}
 
 			// Convert the proto struct to a managed resource
-			mg, gvk, err := s.fromProtoStruct(op.Update.Resource)
+			mg, gvk, err := fromProtoStruct(s.scheme, op.Update.Resource)
 			if err != nil {
 				log.Debug("Error converting resource", "error", err)
 				return err
@@ -272,7 +272,7 @@ func (s *ProviderServer) Session(stream v1alpha1.ExternalService_SessionServer) 
 			}
 
 			// Convert the proto struct to a managed resource
-			mg, gvk, err := s.fromProtoStruct(op.Delete.Resource)
+			mg, gvk, err := fromProtoStruct(s.scheme, op.Delete.Resource)
 			if err != nil {
 				log.Debug("Error converting resource", "error", err)
 				return err
@@ -340,50 +340,4 @@ func (s *ProviderServer) Session(stream v1alpha1.ExternalService_SessionServer) 
 	}
 }
 
-// fromProtoStruct converts a protobuf Struct to a managed resource.
-func (s *ProviderServer) fromProtoStruct(pb *structpb.Struct) (resource.Managed, schema.GroupVersionKind, error) {
-	if pb == nil {
-		return nil, schema.GroupVersionKind{}, errors.New("nil resource struct")
-	}
-
-	// Extract the GVK from the struct (assuming it's in the typical metadata.apiVersion and kind)
-	var gvk schema.GroupVersionKind
-	if apiVersionField, ok := pb.Fields["apiVersion"]; ok && apiVersionField.GetStringValue() != "" {
-		gv, err := schema.ParseGroupVersion(apiVersionField.GetStringValue())
-		if err != nil {
-			return nil, schema.GroupVersionKind{}, err
-		}
-		if kindField, ok := pb.Fields["kind"]; ok && kindField.GetStringValue() != "" {
-			gvk = gv.WithKind(kindField.GetStringValue())
-		}
-	}
-
-	if gvk.Empty() {
-		return nil, schema.GroupVersionKind{}, errors.New(errCannotDetermineResourceType)
-	}
-
-	// Convert the protobuf struct to JSON
-	b, err := protojson.Marshal(pb)
-	if err != nil {
-		return nil, gvk, errors.Wrap(err, errMarshalManagedResource)
-	}
-
-	// Create a new instance of the managed resource
-	obj, err := s.scheme.New(gvk)
-	if err != nil {
-		return nil, gvk, errors.Wrap(err, "cannot create new object of type "+gvk.String())
-	}
-
-	// Unmarshal the JSON into the managed resource
-	if err := json.Unmarshal(b, obj); err != nil {
-		return nil, gvk, errors.Wrap(err, errUnmarshalManagedResource)
-	}
-
-	// Convert to resource.Managed
-	mg, ok := obj.(resource.Managed)
-	if !ok {
-		return nil, gvk, errors.Errorf("%s is not a managed resource", gvk.String())
-	}
-
-	return mg, gvk, nil
-}
+// The fromProtoStruct function has been moved to util.go

@@ -42,18 +42,3 @@ func DefaultServerOptions() []grpc.ServerOption {
 func WithMaxConcurrentStreams(max uint32) grpc.ServerOption {
 	return grpc.MaxConcurrentStreams(max)
 }
-
-// WithMaxConnectionAge returns a gRPC server option that sets the maximum connection age.
-func WithMaxConnectionAge(d time.Duration) grpc.ServerOption {
-	return grpc.MaxConnectionAge(d)
-}
-
-// WithMaxConnectionAgeGrace returns a gRPC server option that sets the maximum connection age grace period.
-func WithMaxConnectionAgeGrace(d time.Duration) grpc.ServerOption {
-	return grpc.MaxConnectionAgeGrace(d)
-}
-
-// WithMaxConnectionIdle returns a gRPC server option that sets the maximum connection idle time.
-func WithMaxConnectionIdle(d time.Duration) grpc.ServerOption {
-	return grpc.MaxConnectionIdle(d)
-}
