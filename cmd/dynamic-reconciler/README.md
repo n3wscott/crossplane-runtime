@@ -13,6 +13,17 @@ The dynamic reconciler is designed to:
 
 This allows for a clean separation between Kubernetes controllers and external providers, without requiring compile-time type information.
 
+## Package Structure
+
+The dynamic reconciler is implemented in the `pkg/reconciler/dynamic` package with the following components:
+
+- `types.go`: Type definitions for configuration and resources
+- `config.go`: Configuration handling and validation
+- `provider.go`: Provider connection management and controller setup
+- `controller.go`: Overall controller management and orchestration
+
+This modular design makes it easy to reuse the dynamic reconciler components in other contexts.
+
 ## Usage
 
 ### Configuration

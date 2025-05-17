@@ -14,64 +14,17 @@ limitations under the License.
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"flag"
-	"fmt"
 	"os"
 	"time"
 
-	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"github.com/crossplane/crossplane-runtime/pkg/event"
-	"github.com/crossplane/crossplane-runtime/pkg/external/client"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
-	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	"github.com/crossplane/crossplane-runtime/pkg/reconciler/dynamic"
 )
-
-// ResourceType defines a resource type to be reconciled.
-type ResourceType struct {
-	// APIVersion is the API version of the resource.
-	APIVersion string `json:"apiVersion"`
-
-	// Kind is the kind of the resource.
-	Kind string `json:"kind"`
-}
-
-// ProviderConfig defines the configuration for a dynamic provider.
-type ProviderConfig struct {
-	// Name is a unique name for this provider.
-	Name string `json:"name"`
-
-	// Endpoint is the gRPC endpoint of the provider.
-	Endpoint string `json:"endpoint"`
-
-	// UseSSL indicates whether to use SSL for the connection.
-	UseSSL bool `json:"useSSL,omitempty"`
-
-	// ResourceTypes is a list of resource types this provider supports.
-	ResourceTypes []ResourceType `json:"resourceTypes"`
-}
-
-// DynamicControllerConfig defines the configuration for the dynamic reconciler.
-type DynamicControllerConfig struct {
-	// Providers is a list of provider configurations.
-	Providers []ProviderConfig `json:"providers"`
-}
 
 func main() {
 	var (
@@ -106,152 +59,58 @@ func main() {
 	zapLogger := logging.NewLogrLogger(ctrl.Log.WithName("dynamic-reconciler"))
 
 	// Load configuration
-	var config DynamicControllerConfig
+	var config dynamic.DynamicControllerConfig
+	var err error
+
 	if configPath != "" {
-		configData, err := os.ReadFile(configPath)
+		// Load config from file
+		config, err = dynamic.LoadConfigFromFile(configPath)
 		if err != nil {
-			setupLog.Error(err, "unable to read config file")
-			os.Exit(1)
-		}
-		if err := json.Unmarshal(configData, &config); err != nil {
-			setupLog.Error(err, "unable to parse config file")
+			setupLog.Error(err, "unable to load configuration from file")
 			os.Exit(1)
 		}
 	} else if providerEndpoint != "" {
-		// Use the command-line endpoint as a single provider
-		config = DynamicControllerConfig{
-			Providers: []ProviderConfig{
-				{
-					Name:     "default",
-					Endpoint: providerEndpoint,
-				},
-			},
-		}
+		// Create config from endpoint
+		config = dynamic.CreateConfigFromEndpoint(providerEndpoint)
 	} else {
 		setupLog.Error(nil, "either --config or --provider-endpoint must be specified")
 		os.Exit(1)
 	}
 
-	// Initialize a new scheme
-	scheme := runtime.NewScheme()
-	_ = clientgoscheme.AddToScheme(scheme)
-
-	// Create a manager
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{
-			BindAddress: metricsAddr,
-		},
-		HealthProbeBindAddress: probeAddr,
-		LeaderElection:         leaderElection,
-		LeaderElectionID:       "dynamic-reconciler-leader-election",
-	})
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
+	// Validate config
+	if err := dynamic.ValidateConfig(config); err != nil {
+		setupLog.Error(err, "invalid configuration")
 		os.Exit(1)
 	}
 
-	// Setup health checks
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
-	}
-
-	// Set up controllers for each provider
-	for _, provider := range config.Providers {
-		if err := setupProvider(mgr, provider, pollInterval, maxReconcileRate, zapLogger); err != nil {
-			setupLog.Error(err, "unable to set up provider", "provider", provider.Name)
-			os.Exit(1)
-		}
-	}
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
-		setupLog.Error(err, "problem running manager")
-		os.Exit(1)
-	}
-}
-
-func setupProvider(mgr ctrl.Manager, config ProviderConfig, pollInterval time.Duration, maxReconcileRate int, log logging.Logger) error {
-	log = log.WithValues("provider", config.Name)
-
-	var gvks []schema.GroupVersionKind
-	for _, rt := range config.ResourceTypes {
-		gv, err := schema.ParseGroupVersion(rt.APIVersion)
-		if err != nil {
-			return errors.Wrapf(err, "invalid API version %s", rt.APIVersion)
-		}
-		gvk := gv.WithKind(rt.Kind)
-		gvks = append(gvks, gvk)
-	}
-
-	// Create the streaming connector
-	var creds credentials.TransportCredentials
-	if config.UseSSL {
-		// In a real implementation, we'd load proper TLS credentials
-		// This is just a placeholder
-		log.Debug("SSL is enabled, but insecure credentials are being used for demonstration")
-		creds = insecure.NewCredentials()
-	} else {
-		creds = insecure.NewCredentials()
-	}
-
-	connector := client.NewStreamingConnector(
-		config.Endpoint,
-		creds,
-		client.WithClientLogger(log),
-		client.WithResourceTypes(gvks...),
+	// Create controller builder
+	builder := dynamic.NewDynamicControllerBuilder(config,
+		dynamic.WithLogger(zapLogger),
+		dynamic.WithMetricsAddress(metricsAddr),
+		dynamic.WithHealthProbeAddress(probeAddr),
+		dynamic.WithLeaderElection(leaderElection),
+		dynamic.WithPollInterval(pollInterval),
+		dynamic.WithMaxReconcileRate(maxReconcileRate),
 	)
 
-	// Register a cleanup function to close the connector when the manager stops
-	mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		<-ctx.Done() // Wait for context to be cancelled (manager is stopping)
-		return connector.Close()
-	}))
-
-	// Set up a controller for each resource type
-	for _, rt := range config.ResourceTypes {
-		gv, _ := schema.ParseGroupVersion(rt.APIVersion)
-		gvk := gv.WithKind(rt.Kind)
-
-		// Ensure the schema knows about this type
-		u := &unstructured.Unstructured{}
-		u.SetGroupVersionKind(gvk)
-
-		// Add the type to the scheme
-		mgr.GetScheme().AddKnownTypeWithName(gvk, u.DeepCopyObject())
-
-		// Set up the controller
-		name := fmt.Sprintf("%s.%s.%s", rt.Kind, gv.Group, config.Name)
-		r := managed.NewReconciler(mgr,
-			resource.ManagedKind(gvk),
-			managed.WithLogger(log.WithValues("controller", name)),
-			managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
-			managed.WithPollInterval(pollInterval),
-			managed.WithExternalConnecter(connector),
-		)
-
-		// Create the unstructured object with the correct GVK
-		obj := &unstructured.Unstructured{}
-		obj.SetGroupVersionKind(gvk)
-
-		if err := ctrl.NewControllerManagedBy(mgr).
-			Named(name).
-			For(obj).
-			WithOptions(controller.Options{
-				MaxConcurrentReconciles: maxReconcileRate,
-				//RateLimiter:             ratelimiter.NewGlobal(maxReconcileRate), TODO: this is not working.
-			}).
-			Complete(r); err != nil {
-			return errors.Wrapf(err, "cannot set up controller for %s", gvk)
-		}
-
-		log.Debug("Set up controller", "gvk", gvk.String())
+	// Build the controller
+	controller, err := builder.Build()
+	if err != nil {
+		setupLog.Error(err, "unable to build controller")
+		os.Exit(1)
 	}
 
-	return nil
+	ctx := ctrl.SetupSignalHandler()
+
+	// Setup the controller
+	if err := controller.Setup(ctx); err != nil {
+		setupLog.Error(err, "unable to setup controller")
+		os.Exit(1)
+	}
+
+	// Start the controller
+	if err := controller.Start(ctx); err != nil {
+		setupLog.Error(err, "problem running controller")
+		os.Exit(1)
+	}
 }
