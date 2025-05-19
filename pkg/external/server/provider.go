@@ -15,7 +15,6 @@ package server
 
 import (
 	"context"
-	"google.golang.org/grpc/health/grpc_health_v1"
 	"net"
 	"os"
 	"strings"
@@ -24,6 +23,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -191,6 +192,9 @@ func (b *ProviderBuilder) Start(ctx context.Context) error {
 
 	// Register the provider server with the gRPC server
 	b.server.RegisterWithServer(b.grpcServer)
+
+	// TODO: we could have an option to not add the reflection server.
+	reflection.Register(b.grpcServer)
 
 	var err error
 	b.listener, err = net.Listen("tcp", b.config.Address)

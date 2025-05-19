@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -27,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
+	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/external/client"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
@@ -95,7 +95,7 @@ func NewProvider(config ProviderConfig, opts ...ProviderOption) (*Provider, erro
 	if config.UseSSL {
 		// In a real implementation, we'd load proper TLS credentials
 		// This is just a placeholder
-		p.log.Debug("SSL is enabled, but insecure credentials are being used for demonstration")
+		p.log.Info("SSL is enabled, but insecure credentials are being used for demonstration")
 		creds = insecure.NewCredentials()
 	} else {
 		creds = insecure.NewCredentials()
@@ -118,6 +118,44 @@ func (p *Provider) Setup(mgr ctrl.Manager) error {
 		<-ctx.Done() // Wait for context to be cancelled (manager is stopping)
 		return p.connector.Close()
 	}))
+
+	// Connect to the provider and discover available resource types
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Call Discover to determine the types that should be reconciled dynamically
+	discoveredTypes, err := p.connector.Discover(ctx)
+	if err != nil {
+		p.log.Info("Failed to discover resource types from provider", "error", err)
+	} else if len(discoveredTypes) > 0 {
+		p.log.Info("Discovered resource types from provider", "count", len(discoveredTypes))
+
+		// Add discovered resource types to our configuration
+		for _, dt := range discoveredTypes {
+			rt := ResourceType{
+				APIVersion: dt.APIVersion,
+				Kind:       dt.Kind,
+			}
+
+			// Check if this resource type is already in our config
+			found := false
+			for _, configRT := range p.config.ResourceTypes {
+				if configRT.APIVersion == rt.APIVersion && configRT.Kind == rt.Kind {
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				p.config.ResourceTypes = append(p.config.ResourceTypes, rt)
+				p.log.Info("Added discovered resource type", "apiVersion", rt.APIVersion, "kind", rt.Kind)
+			}
+		}
+	}
+
+	if len(p.config.ResourceTypes) == 0 {
+		p.log.Info("No resource types specified or discovered. Skipping reconciliation")
+	}
 
 	// Set up a controller for each resource type
 	for _, rt := range p.config.ResourceTypes {
@@ -171,6 +209,6 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 		return errors.Wrapf(err, "cannot set up controller for %s", gvk)
 	}
 
-	p.log.Debug("Set up controller", "gvk", gvk.String())
+	p.log.Info("Set up controller", "gvk", gvk.String())
 	return nil
 }

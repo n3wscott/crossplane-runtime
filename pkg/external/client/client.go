@@ -26,6 +26,15 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 )
 
+// ResourceTypeDescriptor describes a resource type that can be reconciled by a provider.
+type ResourceTypeDescriptor struct {
+	// APIVersion is the API version of the resource type.
+	APIVersion string
+	
+	// Kind is the kind of the resource type.
+	Kind string
+}
+
 // Error strings.
 const (
 	errConnectFailed        = "failed to connect to remote provider"

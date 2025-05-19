@@ -124,7 +124,7 @@ func (c *StreamingConnector) Connect(ctx context.Context, mg resource.Managed) (
 
 	// Get the GVK for the resource
 	gvk := mg.GetObjectKind().GroupVersionKind()
-	
+
 	// Verify this connector can handle this resource type
 	if len(c.gvkMap) > 0 {
 		if _, ok := c.gvkMap[gvk]; !ok {
@@ -155,6 +155,64 @@ func (c *StreamingConnector) Connect(ctx context.Context, mg resource.Managed) (
 	}
 
 	return client, nil
+}
+
+// connectClient creates a direct connection to the gRPC server without creating a streaming client.
+// This is useful for operations that don't require a full streaming session, like discovery.
+func (c *StreamingConnector) connectClient(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	var err error
+
+	// Create the connection if it doesn't exist yet
+	if c.conn == nil {
+		c.conn, err = c.clientFactory.NewClient(c.endpoint, c.options...)
+		if err != nil {
+			return errors.Wrap(err, errConnectFailed)
+		}
+		c.client = v1alpha1.NewExternalServiceClient(c.conn)
+	}
+
+	return nil
+}
+
+// Discover calls the provider's Discover method to retrieve available resource types.
+// It returns a slice of resource type descriptors that can be used to set up controllers.
+func (c *StreamingConnector) Discover(ctx context.Context) ([]ResourceTypeDescriptor, error) {
+	if err := c.connectClient(ctx); err != nil {
+		return nil, err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// Create the connection if it doesn't exist yet
+	if c.conn == nil {
+		return nil, errors.New("not connected to provider, call Connect first")
+	}
+
+	// Call the Discover method
+	resp, err := c.client.Discover(ctx, &v1alpha1.DiscoveryRequest{})
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to discover resource types")
+	}
+
+	// Process the response into resource type descriptors
+	descriptors := make([]ResourceTypeDescriptor, 0)
+
+	// Process reconcilers from the response
+	for _, reconciler := range resp.Reconcilers {
+		if reconciler.For != nil {
+			descriptor := ResourceTypeDescriptor{
+				APIVersion: reconciler.For.ApiVersion,
+				Kind:       reconciler.For.Kind,
+			}
+			descriptors = append(descriptors, descriptor)
+		}
+	}
+
+	return descriptors, nil
 }
 
 // Close closes the underlying gRPC connection.
