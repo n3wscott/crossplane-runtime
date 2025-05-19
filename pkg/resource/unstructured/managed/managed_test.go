@@ -17,6 +17,7 @@ limitations under the License.
 package managed
 
 import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -30,14 +31,13 @@ import (
 var _ resource.Managed = &Unstructured{}
 
 func TestWithGroupVersionKind(t *testing.T) {
-	gvk := corev1.SchemeGroupVersion.WithKind("Pod")
 	cases := map[string]struct {
-		gvk  corev1.SchemeGroupVersion
+		gvk  schema.GroupVersionKind
 		kind string
 		want *Unstructured
 	}{
 		"New": {
-			gvk:  corev1.SchemeGroupVersion,
+			gvk:  corev1.SchemeGroupVersion.WithKind("Pod"),
 			kind: "Pod",
 			want: &Unstructured{
 				Unstructured: unstructured.Unstructured{
@@ -52,7 +52,7 @@ func TestWithGroupVersionKind(t *testing.T) {
 
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
-			got := New(WithGroupVersionKind(tc.gvk.WithKind(tc.kind)))
+			got := New(WithGroupVersionKind(tc.gvk))
 			if diff := cmp.Diff(tc.want, got); diff != "" {
 				t.Errorf("New(WithGroupVersionKind(...): -want, +got:\n%s", diff)
 			}
@@ -141,7 +141,7 @@ func TestWriteConnectionSecretToReference(t *testing.T) {
 }
 
 func TestPublishConnectionDetailsTo(t *testing.T) {
-	ref := &xpv1.PublishConnectionDetailsTo{Name: "cool", ConfigRef: &xpv1.Reference{Name: "config"}}
+	ref := &xpv1.PublishConnectionDetailsTo{Name: "cool", SecretStoreConfigRef: &xpv1.Reference{Name: "config"}}
 	cases := map[string]struct {
 		u    *Unstructured
 		set  *xpv1.PublishConnectionDetailsTo

@@ -19,10 +19,8 @@ package managed
 
 import (
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/types"
 
 	xpv1 "github.com/crossplane/crossplane-runtime/apis/common/v1"
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
@@ -49,7 +47,8 @@ func WithConditions(c ...xpv1.Condition) Option {
 
 // New returns a new unstructured managed resource.
 func New(opts ...Option) *Unstructured {
-	cr := &Unstructured{unstructured.Unstructured{Object: make(map[string]any)}}
+	cr := &Unstructured{}
+	cr.Default()
 	for _, f := range opts {
 		f(cr)
 	}
@@ -62,6 +61,21 @@ func New(opts ...Option) *Unstructured {
 // An Unstructured managed resource.
 type Unstructured struct {
 	unstructured.Unstructured
+}
+
+// Default ensures the Object map is initialized.
+// This is used by the runtime.Scheme when creating new instances.
+func (cr *Unstructured) Default() {
+	if cr.Object == nil {
+		cr.Object = make(map[string]interface{})
+	}
+	
+	// If GVK is already set, make sure it's reflected in the Object map
+	gvk := cr.GetObjectKind().GroupVersionKind()
+	if !gvk.Empty() {
+		cr.Object["apiVersion"] = gvk.GroupVersion().String()
+		cr.Object["kind"] = gvk.Kind
+	}
 }
 
 // GetUnstructured returns the underlying *unstructured.Unstructured.

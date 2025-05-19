@@ -18,6 +18,7 @@ package managed
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"strings"
 	"time"
@@ -803,7 +804,9 @@ func WithChangeLogger(c ChangeLogger) ReconcilerOption {
 func NewReconciler(m manager.Manager, of resource.ManagedKind, o ...ReconcilerOption) *Reconciler {
 	nm := func() resource.Managed {
 		//nolint:forcetypeassert // If this isn't an MR it's a programming error and we want to panic.
-		return resource.MustCreateObject(schema.GroupVersionKind(of), m.GetScheme()).(resource.Managed)
+		m := resource.MustCreateObject(schema.GroupVersionKind(of), m.GetScheme()).(resource.Managed)
+		fmt.Printf("Asked to create a new managed resource from scheme, got %#v\n", m)
+		return m
 	}
 
 	// Panic early if we've been asked to reconcile a resource kind that has not

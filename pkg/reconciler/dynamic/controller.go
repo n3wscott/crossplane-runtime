@@ -120,6 +120,8 @@ func (b *DynamicControllerBuilder) Build() (DynamicControllerManager, error) {
 		return nil, errors.Wrap(err, "cannot add kubernetes client-go scheme")
 	}
 
+	// TODO: here we need to link the scheme of out known GKVs to the types if it is not done elsewhere.
+
 	// Create a manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme: scheme,

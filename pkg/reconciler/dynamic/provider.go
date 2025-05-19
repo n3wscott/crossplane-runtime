@@ -20,7 +20,6 @@ import (
 
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -32,6 +31,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
+	unstructured "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/managed"
 )
 
 // ProviderOption configures a Provider.
@@ -175,11 +175,22 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 	}
 
 	// Ensure the schema knows about this type
-	u := &unstructured.Unstructured{}
+	u := unstructured.New()
 	u.SetGroupVersionKind(gvk)
 
 	// Add the type to the scheme
-	mgr.GetScheme().AddKnownTypeWithName(gvk, u.DeepCopyObject())
+	if err := mgr.GetScheme().AddKnownTypeWithName(gvk, u.DeepCopyObject()); err != nil {
+		return errors.Wrapf(err, "failed to add type %s to scheme", gvk)
+	}
+	
+	// Register defaulting function to ensure Object map is initialized
+	if err := mgr.GetScheme().AddTypeDefaultingFunc(gvk, func(obj interface{}) {
+		if u, ok := obj.(*unstructured.Unstructured); ok {
+			u.Default()
+		}
+	}); err != nil {
+		return errors.Wrapf(err, "failed to add defaulting function for %s", gvk)
+	}
 
 	// Set up the controller name
 	gv, _ := schema.ParseGroupVersion(rt.APIVersion)
@@ -195,8 +206,7 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 	)
 
 	// Create the unstructured object with the correct GVK
-	obj := &unstructured.Unstructured{}
-	obj.SetGroupVersionKind(gvk)
+	obj := unstructured.New(unstructured.WithGroupVersionKind(gvk))
 
 	// Setup the controller
 	if err := ctrl.NewControllerManagedBy(mgr).
