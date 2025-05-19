@@ -31,7 +31,7 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
-	unstructured "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/managed"
+	managedpkg "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/managed"
 )
 
 // ProviderOption configures a Provider.
@@ -66,6 +66,7 @@ type Provider struct {
 	gvks             []schema.GroupVersionKind
 	pollInterval     time.Duration
 	maxReconcileRate int
+	factory          *managedpkg.TypeTagFactory
 }
 
 // NewProvider creates a new Provider with the given configuration and options.
@@ -75,6 +76,7 @@ func NewProvider(config ProviderConfig, opts ...ProviderOption) (*Provider, erro
 		log:              logging.NewNopLogger(),
 		pollInterval:     1 * time.Minute,
 		maxReconcileRate: 10,
+		factory:          managedpkg.NewTypeTagFactory(),
 	}
 
 	for _, opt := range opts {
@@ -174,22 +176,9 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 		return err
 	}
 
-	// Ensure the schema knows about this type
-	u := unstructured.New()
-	u.SetGroupVersionKind(gvk)
-
-	// Add the type to the scheme
-	if err := mgr.GetScheme().AddKnownTypeWithName(gvk, u.DeepCopyObject()); err != nil {
-		return errors.Wrapf(err, "failed to add type %s to scheme", gvk)
-	}
-	
-	// Register defaulting function to ensure Object map is initialized
-	if err := mgr.GetScheme().AddTypeDefaultingFunc(gvk, func(obj interface{}) {
-		if u, ok := obj.(*unstructured.Unstructured); ok {
-			u.Default()
-		}
-	}); err != nil {
-		return errors.Wrapf(err, "failed to add defaulting function for %s", gvk)
+	// Register a new unique type for this GVK in the scheme
+	if err := p.factory.RegisterWithScheme(mgr.GetScheme(), gvk); err != nil {
+		return errors.Wrapf(err, "failed to register type for %s", gvk)
 	}
 
 	// Set up the controller name
@@ -206,7 +195,7 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 	)
 
 	// Create the unstructured object with the correct GVK
-	obj := unstructured.New(unstructured.WithGroupVersionKind(gvk))
+	obj := p.factory.CreateObject(gvk)
 
 	// Setup the controller
 	if err := ctrl.NewControllerManagedBy(mgr).
