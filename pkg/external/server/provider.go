@@ -15,6 +15,7 @@ package server
 
 import (
 	"context"
+	"google.golang.org/grpc/health/grpc_health_v1"
 	"net"
 	"os"
 	"strings"
@@ -22,6 +23,7 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/health"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -90,6 +92,9 @@ func WithProviderGRPCOptions(opts ...grpc.ServerOption) ProviderOption {
 
 // ProviderBuilder is used to simplify the registration of handlers for a provider.
 type ProviderBuilder struct {
+	// health is a gRPC health server implementation.
+	health grpc_health_v1.HealthServer
+
 	// server is the underlying ProviderServer.
 	server *ProviderServer
 
@@ -179,6 +184,11 @@ func (b *ProviderBuilder) RegisterExistingConnector(gvk schema.GroupVersionKind,
 
 // Start starts the gRPC server.
 func (b *ProviderBuilder) Start(ctx context.Context) error {
+	if b.health == nil {
+		b.health = health.NewServer()
+	}
+	grpc_health_v1.RegisterHealthServer(b.grpcServer, b.health)
+
 	// Register the provider server with the gRPC server
 	b.server.RegisterWithServer(b.grpcServer)
 
@@ -189,6 +199,12 @@ func (b *ProviderBuilder) Start(ctx context.Context) error {
 	}
 
 	b.log.Info("Starting gRPC provider server", "address", b.config.Address)
+
+	// Try casting to a default health server and set the serving status.
+	if healthServer, ok := b.health.(*health.Server); ok {
+		// TODO: we could look at what is being served and host it inside of the serving status for each kind.
+		healthServer.SetServingStatus("provider-service", grpc_health_v1.HealthCheckResponse_SERVING)
+	}
 
 	// Start serving in a goroutine
 	go func() {

@@ -14,11 +14,8 @@ limitations under the License.
 package server
 
 import (
-	"encoding/json"
 	"fmt"
 
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/structpb"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/crossplane/crossplane-runtime/apis/proto/external/v1alpha1"
