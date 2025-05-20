@@ -794,6 +794,13 @@ func WithChangeLogger(c ChangeLogger) ReconcilerOption {
 	}
 }
 
+// WithNewManaged rewrites the object factory for the managed resource.
+func WithNewManaged(nm func() resource.Managed) ReconcilerOption {
+	return func(r *Reconciler) {
+		r.newManaged = nm
+	}
+}
+
 // NewReconciler returns a Reconciler that reconciles managed resources of the
 // supplied ManagedKind with resources in an external system such as a cloud
 // provider API. It panics if asked to reconcile a managed resource kind that is

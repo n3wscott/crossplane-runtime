@@ -18,13 +18,6 @@ import (
 	"fmt"
 	"time"
 
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
 	"github.com/crossplane/crossplane-runtime/pkg/external/client"
@@ -32,6 +25,12 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/resource"
 	managedpkg "github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/managed"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // ProviderOption configures a Provider.
@@ -66,7 +65,6 @@ type Provider struct {
 	gvks             []schema.GroupVersionKind
 	pollInterval     time.Duration
 	maxReconcileRate int
-	factory          *managedpkg.TypeTagFactory
 }
 
 // NewProvider creates a new Provider with the given configuration and options.
@@ -76,7 +74,6 @@ func NewProvider(config ProviderConfig, opts ...ProviderOption) (*Provider, erro
 		log:              logging.NewNopLogger(),
 		pollInterval:     1 * time.Minute,
 		maxReconcileRate: 10,
-		factory:          managedpkg.NewTypeTagFactory(),
 	}
 
 	for _, opt := range opts {
@@ -176,11 +173,6 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 		return err
 	}
 
-	// Register a new unique type for this GVK in the scheme
-	if err := p.factory.RegisterWithScheme(mgr.GetScheme(), gvk); err != nil {
-		return errors.Wrapf(err, "failed to register type for %s", gvk)
-	}
-
 	// Set up the controller name
 	gv, _ := schema.ParseGroupVersion(rt.APIVersion)
 	name := fmt.Sprintf("%s.%s.%s", rt.Kind, gv.Group, p.config.Name)
@@ -192,15 +184,17 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 		managed.WithRecorder(event.NewAPIRecorder(mgr.GetEventRecorderFor(name))),
 		managed.WithPollInterval(p.pollInterval),
 		managed.WithExternalConnecter(p.connector),
+		managed.WithNewManaged(func() resource.Managed {
+			return managedpkg.New(managedpkg.WithGroupVersionKind(gvk))
+		}),
 	)
 
-	// Create the unstructured object with the correct GVK
-	obj := p.factory.CreateObject(gvk)
-
-	// Setup the controller
-	if err := ctrl.NewControllerManagedBy(mgr).
+	// Use our custom builder instead of controller-runtime's builder
+	builder := NewManagedBuilder(mgr, WithLogger(p.log.WithValues("builder", name)))
+	
+	if err := builder.
 		Named(name).
-		For(obj).
+		ForKind(gvk).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: p.maxReconcileRate,
 		}).
