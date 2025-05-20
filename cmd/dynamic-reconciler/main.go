@@ -15,6 +15,7 @@ package main
 
 import (
 	"flag"
+	dynamic2 "github.com/crossplane/crossplane-runtime/pkg/controller/managed"
 	"os"
 	"time"
 
@@ -23,7 +24,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
-	"github.com/crossplane/crossplane-runtime/pkg/reconciler/dynamic"
 )
 
 func main() {
@@ -56,51 +56,51 @@ func main() {
 	// Setup logging
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	setupLog := ctrl.Log.WithName("setup")
-	zapLogger := logging.NewLogrLogger(ctrl.Log.WithName("dynamic-reconciler"))
+	zapLogger := logging.NewLogrLogger(ctrl.Log.WithName("managed-reconciler"))
 
 	// Load configuration
-	var config dynamic.DynamicControllerConfig
+	var config dynamic2.DynamicControllerConfig
 	var err error
 
 	if configPath != "" {
 		// Load config from file
-		config, err = dynamic.LoadConfigFromFile(configPath)
+		config, err = dynamic2.LoadConfigFromFile(configPath)
 		if err != nil {
 			setupLog.Error(err, "unable to load configuration from file")
 			os.Exit(1)
 		}
 	} else if providerEndpoint != "" {
 		// Create config from endpoint
-		config = dynamic.CreateConfigFromEndpoint(providerEndpoint)
+		config = dynamic2.CreateConfigFromEndpoint(providerEndpoint)
 	} else {
 		setupLog.Error(nil, "either --config or --provider-endpoint must be specified")
 		os.Exit(1)
 	}
 
 	// Validate config
-	if err := dynamic.ValidateConfig(config); err != nil {
+	if err := dynamic2.ValidateConfig(config); err != nil {
 		setupLog.Error(err, "invalid configuration")
 		os.Exit(1)
 	}
 
 	// Create controller builder
-	builder := dynamic.NewDynamicControllerBuilder(config,
-		dynamic.WithLogger(zapLogger),
-		dynamic.WithMetricsAddress(metricsAddr),
-		dynamic.WithHealthProbeAddress(probeAddr),
-		dynamic.WithLeaderElection(leaderElection),
-		dynamic.WithPollInterval(pollInterval),
-		dynamic.WithMaxReconcileRate(maxReconcileRate),
+	builder := dynamic2.NewDynamicControllerBuilder(config,
+		dynamic2.WithLogger(zapLogger),
+		dynamic2.WithMetricsAddress(metricsAddr),
+		dynamic2.WithHealthProbeAddress(probeAddr),
+		dynamic2.WithLeaderElection(leaderElection),
+		dynamic2.WithPollInterval(pollInterval),
+		dynamic2.WithMaxReconcileRate(maxReconcileRate),
 	)
 
+	ctx := ctrl.SetupSignalHandler()
+
 	// Build the controller
-	controller, err := builder.Build()
+	controller, err := builder.Build(ctx)
 	if err != nil {
 		setupLog.Error(err, "unable to build controller")
 		os.Exit(1)
 	}
-
-	ctx := ctrl.SetupSignalHandler()
 
 	// Setup the controller
 	if err := controller.Setup(ctx); err != nil {

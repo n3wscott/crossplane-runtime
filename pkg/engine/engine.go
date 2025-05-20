@@ -40,7 +40,7 @@ import (
 )
 
 // A ControllerEngine manages a set of controllers that can be dynamically
-// started and stopped. It also manages a dynamic set of watches per controller,
+// started and stopped. It also manages a managed set of watches per controller,
 // and the informers that back them.
 type ControllerEngine struct {
 	// The manager of this engine's controllers. Controllers managed by the

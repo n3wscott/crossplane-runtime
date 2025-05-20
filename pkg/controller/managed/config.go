@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package dynamic
+package managed
 
 import (
 	"encoding/json"
@@ -27,7 +27,7 @@ type ConfigOption func(*ConfigOptions)
 type ConfigOptions struct {
 	// Default provider endpoint when none is specified.
 	DefaultEndpoint string
-	
+
 	// Default provider name when none is specified.
 	DefaultName string
 }
@@ -67,12 +67,12 @@ func LoadConfigFromFile(path string, opts ...ConfigOption) (DynamicControllerCon
 	if err != nil {
 		return DynamicControllerConfig{}, errors.Wrap(err, "unable to read config file")
 	}
-	
+
 	var config DynamicControllerConfig
 	if err := json.Unmarshal(data, &config); err != nil {
 		return DynamicControllerConfig{}, errors.Wrap(err, "unable to parse config file")
 	}
-	
+
 	return config, nil
 }
 
@@ -83,12 +83,12 @@ func CreateConfigFromEndpoint(endpoint string, opts ...ConfigOption) DynamicCont
 	for _, opt := range opts {
 		opt(options)
 	}
-	
+
 	// If no endpoint is provided, use the default
 	if endpoint == "" {
 		endpoint = options.DefaultEndpoint
 	}
-	
+
 	return DynamicControllerConfig{
 		Providers: []ProviderConfig{
 			{
@@ -104,7 +104,7 @@ func ValidateConfig(config DynamicControllerConfig) error {
 	if len(config.Providers) == 0 {
 		return errors.New("no providers specified in configuration")
 	}
-	
+
 	for i, provider := range config.Providers {
 		if provider.Name == "" {
 			return errors.Errorf("provider at index %d has no name", i)
@@ -113,6 +113,6 @@ func ValidateConfig(config DynamicControllerConfig) error {
 			return errors.Errorf("provider %s has no endpoint", provider.Name)
 		}
 	}
-	
+
 	return nil
 }

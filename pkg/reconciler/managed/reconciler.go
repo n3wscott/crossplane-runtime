@@ -637,7 +637,7 @@ func WithMetricRecorder(recorder MetricRecorder) ReconcilerOption {
 }
 
 // PollIntervalHook represents the function type passed to the
-// WithPollIntervalHook option to support dynamic computation of the poll
+// WithPollIntervalHook option to support managed computation of the poll
 // interval.
 type PollIntervalHook func(managed resource.Managed, pollInterval time.Duration) time.Duration
 

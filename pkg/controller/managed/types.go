@@ -11,15 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package dynamic implements a dynamic reconciler that can work with any managed resource
+// Package managed implements a managed reconciler that can work with any managed resource
 // type without compile-time knowledge of the schema.
-package dynamic
+package managed
 
 import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-// ResourceType defines a resource type to be reconciled by a dynamic controller.
+// ResourceType defines a resource type to be reconciled by a managed controller.
 type ResourceType struct {
 	// APIVersion is the API version of the resource.
 	APIVersion string `json:"apiVersion"`
@@ -28,7 +28,7 @@ type ResourceType struct {
 	Kind string `json:"kind"`
 }
 
-// ProviderConfig defines the configuration for a dynamic provider.
+// ProviderConfig defines the configuration for a managed provider.
 type ProviderConfig struct {
 	// Name is a unique name for this provider.
 	Name string `json:"name"`
@@ -43,7 +43,7 @@ type ProviderConfig struct {
 	ResourceTypes []ResourceType `json:"resourceTypes"`
 }
 
-// DynamicControllerConfig defines the configuration for the dynamic reconciler.
+// DynamicControllerConfig defines the configuration for the managed reconciler.
 type DynamicControllerConfig struct {
 	// Providers is a list of provider configurations.
 	Providers []ProviderConfig `json:"providers"`

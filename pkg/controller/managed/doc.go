@@ -12,7 +12,7 @@ limitations under the License.
 */
 
 /*
-Package dynamic implements a dynamic reconciler that can work with any managed resource
+Package managed implements a managed reconciler that can work with any managed resource
 type without compile-time knowledge of the schema.
 
 # Architecture
@@ -26,22 +26,22 @@ The package follows a layered architecture:
 
 # Core Components
 
-* DynamicControllerManager: Interface for managing dynamic controllers
+* DynamicControllerManager: Interface for managing managed controllers
 * Provider: Manages connections to provider servers
 * ResourceType: Represents a resource type that can be reconciled
 
 # Usage
 
-The package is designed to be used either through the provided CLI in cmd/dynamic-reconciler
+The package is designed to be used either through the provided CLI in cmd/managed-reconciler
 or as a library in other Go programs:
 
-	import "github.com/crossplane/crossplane-runtime/pkg/reconciler/dynamic"
+	import "github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 
 	// Create a configuration
-	config := dynamic.DynamicControllerConfig{...}
+	config := managed.DynamicControllerConfig{...}
 
 	// Build a controller
-	builder := dynamic.NewDynamicControllerBuilder(config)
+	builder := managed.NewDynamicControllerBuilder(config)
 	controller, _ := builder.Build()
 
 	// Setup and start
@@ -56,4 +56,4 @@ The package is designed to be extended in various ways:
 2. Additional controller options
 3. Custom resource type handling
 */
-package dynamic
+package managed

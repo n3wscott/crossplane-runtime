@@ -45,7 +45,7 @@ The `controller.go` file defines the main controller management:
 To use this package in your own project:
 
 ```go
-import "github.com/crossplane/crossplane-runtime/pkg/reconciler/dynamic"
+import "github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 
 // Create a configuration
 config := dynamic.DynamicControllerConfig{

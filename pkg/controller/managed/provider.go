@@ -11,11 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package dynamic
+package managed
 
 import (
 	"context"
 	"fmt"
+	"github.com/crossplane/crossplane-runtime/pkg/engine"
+	kunstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"time"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -29,7 +33,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -57,7 +60,7 @@ func WithProviderMaxReconcileRate(rate int) ProviderOption {
 	}
 }
 
-// Provider represents a dynamic provider connection and its configuration.
+// Provider represents a managed provider connection and its configuration.
 type Provider struct {
 	config           ProviderConfig
 	connector        *client.StreamingConnector
@@ -111,7 +114,7 @@ func NewProvider(config ProviderConfig, opts ...ProviderOption) (*Provider, erro
 }
 
 // Setup sets up controllers for all resource types handled by this provider.
-func (p *Provider) Setup(mgr ctrl.Manager) error {
+func (p *Provider) Setup(ctx context.Context, eng engine.IControllerEngine, mgr ctrl.Manager) error {
 	// Add a cleanup function to close the connector when the manager stops
 	mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
 		<-ctx.Done() // Wait for context to be cancelled (manager is stopping)
@@ -158,7 +161,7 @@ func (p *Provider) Setup(mgr ctrl.Manager) error {
 
 	// Set up a controller for each resource type
 	for _, rt := range p.config.ResourceTypes {
-		if err := p.setupResourceController(mgr, rt); err != nil {
+		if err := p.setupResourceController(ctx, eng, mgr, rt); err != nil {
 			return err
 		}
 	}
@@ -167,7 +170,7 @@ func (p *Provider) Setup(mgr ctrl.Manager) error {
 }
 
 // setupResourceController sets up a controller for a specific resource type.
-func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) error {
+func (p *Provider) setupResourceController(ctx context.Context, eng engine.IControllerEngine, mgr ctrl.Manager, rt ResourceType) error {
 	gvk, err := ResourceTypeToGVK(rt)
 	if err != nil {
 		return err
@@ -189,19 +192,27 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 		}),
 	)
 
-	// Use our custom builder instead of controller-runtime's builder
-	builder := NewManagedBuilder(mgr, WithBuilderLogger(p.log.WithValues("builder", name)))
+	ko := kcontroller.Options{
+		Reconciler: r,
+	} // r.options.ForControllerRuntime() // TODO: setup more options.
 
-	if err := builder.
-		Named(name).
-		ForKind(gvk).
-		WithOptions(controller.Options{
-			MaxConcurrentReconciles: p.maxReconcileRate,
-		}).
-		Complete(r); err != nil {
-		return errors.Wrapf(err, "cannot set up controller for %s", gvk)
+	co := []engine.ControllerOption{engine.WithRuntimeOptions(ko)}
+
+	if err := eng.Start(name, co...); err != nil {
+		return err
 	}
 
-	p.log.Info("Set up controller", "gvk", gvk.String())
+	// This must be *unstructured.Unstructured, not *composite.Unstructured.
+	// controller-runtime doesn't support watching types that satisfy the
+	// runtime.Unstructured interface - only *unstructured.Unstructured.
+	kind := &kunstructured.Unstructured{}
+	kind.SetGroupVersionKind(gvk)
+
+	if err := eng.StartWatches(ctx, name,
+		engine.WatchFor(kind, engine.WatchTypeManagedResource, &handler.EnqueueRequestForObject{}),
+	); err != nil {
+		return err
+	}
+
 	return nil
 }

@@ -96,7 +96,7 @@ To build the dynamic reconciler as a container image:
 
 ```bash
 # From the crossplane-runtime directory
-docker build -t crossplane/dynamic-reconciler -f Dockerfile .
+docker build -t crossplane/managed-reconciler -f Dockerfile .
 ```
 
 ## Running in Kubernetes
@@ -112,7 +112,7 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: dynamic-reconciler
+      app: managed-reconciler
   template:
     metadata:
       labels:
@@ -129,7 +129,7 @@ spec:
       volumes:
       - name: config
         configMap:
-          name: dynamic-reconciler-config
+          name: managed-reconciler-config
 ---
 apiVersion: v1
 kind: ConfigMap
