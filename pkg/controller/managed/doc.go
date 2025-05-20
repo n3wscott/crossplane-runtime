@@ -38,7 +38,7 @@ or as a library in other Go programs:
 	import "github.com/crossplane/crossplane-runtime/pkg/reconciler/managed"
 
 	// Create a configuration
-	config := managed.DynamicControllerConfig{...}
+	config := managed.ControllerConfig{...}
 
 	// Build a controller
 	builder := managed.New(config)

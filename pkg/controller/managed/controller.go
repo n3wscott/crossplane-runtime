@@ -11,6 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// Package managed implements a managed reconciler that can work with any managed resource
+// type without compile-time knowledge of the schema.
 package managed
 
 import (
@@ -76,7 +78,7 @@ func WithLogger(log logging.Logger) ControllerOption {
 
 // Controller builds a DynamicControllerManager.
 type Controller struct {
-	config           DynamicControllerConfig
+	config           ControllerConfig
 	log              logging.Logger
 	metricsAddr      string
 	probeAddr        string
@@ -89,7 +91,7 @@ type Controller struct {
 }
 
 // NewController creates a new Controller.
-func NewController(config DynamicControllerConfig, opts ...ControllerOption) *Controller {
+func NewController(config ControllerConfig, opts ...ControllerOption) *Controller {
 	b := &Controller{
 		config:           config,
 		log:              logging.NewNopLogger(),

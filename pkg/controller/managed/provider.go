@@ -15,11 +15,13 @@ package managed
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"github.com/crossplane/crossplane-runtime/pkg/engine"
 	kunstructured "k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kcontroller "sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	"strings"
 	"time"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
@@ -70,6 +72,19 @@ type Provider struct {
 	maxReconcileRate int
 }
 
+// getCredentials returns the appropriate credentials based on SSL configuration.
+func getCredentials(endpoint string, useSSL bool, log logging.Logger) credentials.TransportCredentials {
+
+	if useSSL || strings.HasSuffix(endpoint, ":443") {
+		// For SSL connections without local certificates, use TLS with SkipVerify
+		log.Info("SSL is enabled with insecure skip verification")
+		return credentials.NewTLS(&tls.Config{
+			InsecureSkipVerify: true,
+		})
+	}
+	return insecure.NewCredentials()
+}
+
 // NewProvider creates a new Provider with the given configuration and options.
 func NewProvider(config ProviderConfig, opts ...ProviderOption) (*Provider, error) {
 	p := &Provider{
@@ -92,17 +107,10 @@ func NewProvider(config ProviderConfig, opts ...ProviderOption) (*Provider, erro
 		p.gvks = append(p.gvks, gvk)
 	}
 
-	// Create the streaming connector
-	var creds credentials.TransportCredentials
-	if config.UseSSL {
-		// In a real implementation, we'd load proper TLS credentials
-		// This is just a placeholder
-		p.log.Info("SSL is enabled, but insecure credentials are being used for demonstration")
-		creds = insecure.NewCredentials()
-	} else {
-		creds = insecure.NewCredentials()
-	}
+	// Get credentials based on SSL configuration
+	creds := getCredentials(config.Endpoint, config.UseSSL, p.log)
 
+	// Create the streaming connector
 	p.connector = client.NewStreamingConnector(
 		config.Endpoint,
 		creds,
@@ -113,14 +121,8 @@ func NewProvider(config ProviderConfig, opts ...ProviderOption) (*Provider, erro
 	return p, nil
 }
 
-// Setup sets up controllers for all resource types handled by this provider.
-func (p *Provider) Setup(ctx context.Context, eng engine.IControllerEngine, mgr ctrl.Manager) error {
-	// Add a cleanup function to close the connector when the manager stops
-	mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
-		<-ctx.Done() // Wait for context to be cancelled (manager is stopping)
-		return p.connector.Close()
-	}))
-
+// discoverResourceTypes discovers resource types from the provider.
+func (p *Provider) discoverResourceTypes(ctx context.Context) {
 	// Connect to the provider and discover available resource types
 	disCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
@@ -129,34 +131,52 @@ func (p *Provider) Setup(ctx context.Context, eng engine.IControllerEngine, mgr 
 	discoveredTypes, err := p.connector.Discover(disCtx)
 	if err != nil {
 		p.log.Info("Failed to discover resource types from provider", "error", err)
-	} else if len(discoveredTypes) > 0 {
-		p.log.Info("Discovered resource types from provider", "count", len(discoveredTypes))
+		return
+	}
 
-		// Add discovered resource types to our configuration
-		for _, dt := range discoveredTypes {
-			rt := ResourceType{
-				APIVersion: dt.APIVersion,
-				Kind:       dt.Kind,
-			}
+	if len(discoveredTypes) == 0 {
+		return
+	}
 
-			// Check if this resource type is already in our config
-			found := false
-			for _, configRT := range p.config.ResourceTypes {
-				if configRT.APIVersion == rt.APIVersion && configRT.Kind == rt.Kind {
-					found = true
-					break
-				}
-			}
+	p.log.Info("Discovered resource types from provider", "count", len(discoveredTypes))
 
-			if !found {
-				p.config.ResourceTypes = append(p.config.ResourceTypes, rt)
-				p.log.Info("Added discovered resource type", "apiVersion", rt.APIVersion, "kind", rt.Kind)
+	// Add discovered resource types to our configuration
+	for _, dt := range discoveredTypes {
+		rt := ResourceType{
+			APIVersion: dt.APIVersion,
+			Kind:       dt.Kind,
+		}
+
+		// Check if this resource type is already in our config
+		found := false
+		for _, configRT := range p.config.ResourceTypes {
+			if configRT.APIVersion == rt.APIVersion && configRT.Kind == rt.Kind {
+				found = true
+				break
 			}
 		}
+
+		if !found {
+			p.config.ResourceTypes = append(p.config.ResourceTypes, rt)
+			p.log.Info("Added discovered resource type", "apiVersion", rt.APIVersion, "kind", rt.Kind)
+		}
 	}
+}
+
+// Setup sets up controllers for all resource types handled by this provider.
+func (p *Provider) Setup(ctx context.Context, eng engine.IControllerEngine, mgr ctrl.Manager) error {
+	// Add a cleanup function to close the connector when the manager stops
+	mgr.Add(manager.RunnableFunc(func(ctx context.Context) error {
+		<-ctx.Done() // Wait for context to be cancelled (manager is stopping)
+		return p.connector.Close()
+	}))
+
+	// Discover resource types from the provider
+	p.discoverResourceTypes(ctx)
 
 	if len(p.config.ResourceTypes) == 0 {
 		p.log.Info("No resource types specified or discovered. Skipping reconciliation")
+		return nil
 	}
 
 	// Set up a controller for each resource type

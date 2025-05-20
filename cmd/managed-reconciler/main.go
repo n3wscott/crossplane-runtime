@@ -59,7 +59,7 @@ func main() {
 	zapLogger := logging.NewLogrLogger(ctrl.Log.WithName("managed-reconciler"))
 
 	// Load configuration
-	var config managed.DynamicControllerConfig
+	var config managed.ControllerConfig
 	var err error
 
 	if configPath != "" {
