@@ -37,10 +37,10 @@ const (
 
 	// TypeHealthy resources are believed to be in a healthy state and to have all
 	// of their child resources in a healthy state. For example, a claim is
-	// healthy when the claim is synced and the underlying composite resource is
-	// both synced and healthy. A composite resource is healthy when the composite
+	// healthy when the claim is synced and the underlying managed resource is
+	// both synced and healthy. A managed resource is healthy when the managed
 	// resource is synced and all composed resources are synced and, if
-	// applicable, healthy (e.g., the composed resource is a composite resource).
+	// applicable, healthy (e.g., the composed resource is a managed resource).
 	// TODO: This condition is not yet implemented. It is currently just reserved
 	// as a system condition. See the tracking issue for more details
 	// https://github.com/crossplane/crossplane/issues/5643.

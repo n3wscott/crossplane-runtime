@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package composite contains an unstructured composite resource.
+// Package managed contains an unstructured managed resource.
 package composite
 
 import (
@@ -29,10 +29,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/reference"
 )
 
-// An Option modifies an unstructured composite resource.
+// An Option modifies an unstructured managed resource.
 type Option func(*Unstructured)
 
-// WithGroupVersionKind sets the GroupVersionKind of the unstructured composite
+// WithGroupVersionKind sets the GroupVersionKind of the unstructured managed
 // resource.
 func WithGroupVersionKind(gvk schema.GroupVersionKind) Option {
 	return func(c *Unstructured) {
@@ -41,7 +41,7 @@ func WithGroupVersionKind(gvk schema.GroupVersionKind) Option {
 }
 
 // WithConditions returns an Option that sets the supplied conditions on an
-// unstructured composite resource.
+// unstructured managed resource.
 func WithConditions(c ...xpv1.Condition) Option {
 	return func(cr *Unstructured) {
 		cr.SetConditions(c...)
@@ -177,7 +177,7 @@ func (c *Unstructured) SetResourceReferences(refs []corev1.ObjectReference) {
 	_ = fieldpath.Pave(c.Object).SetValue("spec.resourceRefs", filtered)
 }
 
-// GetReference returns reference to this composite.
+// GetReference returns reference to this managed.
 func (c *Unstructured) GetReference() *reference.Composite {
 	return &reference.Composite{
 		APIVersion: c.GetAPIVersion(),
@@ -277,7 +277,7 @@ func (c *Unstructured) SetEnvironmentConfigReferences(refs []corev1.ObjectRefere
 	_ = fieldpath.Pave(c.Object).SetValue("spec.environmentConfigRefs", filtered)
 }
 
-// SetObservedGeneration of this composite resource claim.
+// SetObservedGeneration of this managed resource claim.
 func (c *Unstructured) SetObservedGeneration(generation int64) {
 	status := &xpv1.ObservedStatus{}
 	_ = fieldpath.Pave(c.Object).GetValueInto("status", status)
@@ -285,7 +285,7 @@ func (c *Unstructured) SetObservedGeneration(generation int64) {
 	_ = fieldpath.Pave(c.Object).SetValue("status.observedGeneration", status.ObservedGeneration)
 }
 
-// GetObservedGeneration of this composite resource claim.
+// GetObservedGeneration of this managed resource claim.
 func (c *Unstructured) GetObservedGeneration() int64 {
 	status := &xpv1.ObservedStatus{}
 	_ = fieldpath.Pave(c.Object).GetValueInto("status", status)

@@ -816,10 +816,6 @@ func NewReconciler(m manager.Manager, of resource.ManagedKind, o ...ReconcilerOp
 		return m
 	}
 
-	// Panic early if we've been asked to reconcile a resource kind that has not
-	// been registered with our controller manager's scheme.
-	_ = nm()
-
 	r := &Reconciler{
 		client:                      m.GetClient(),
 		newManaged:                  nm,
@@ -840,6 +836,10 @@ func NewReconciler(m manager.Manager, of resource.ManagedKind, o ...ReconcilerOp
 	for _, ro := range o {
 		ro(r)
 	}
+
+	// Panic early if we've been asked to reconcile a resource kind that has not
+	// been registered with our controller manager's scheme.
+	_ = r.newManaged()
 
 	return r
 }

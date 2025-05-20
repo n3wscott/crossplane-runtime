@@ -36,15 +36,15 @@ type Claim struct {
 	Namespace string `json:"namespace"`
 }
 
-// A Composite is a reference to a composite.
+// A Composite is a reference to a managed.
 type Composite struct {
-	// APIVersion of the referenced composite.
+	// APIVersion of the referenced managed.
 	APIVersion string `json:"apiVersion"`
 
-	// Kind of the referenced composite.
+	// Kind of the referenced managed.
 	Kind string `json:"kind"`
 
-	// Name of the referenced composite.
+	// Name of the referenced managed.
 	Name string `json:"name"`
 }
 
@@ -53,7 +53,7 @@ func (c *Claim) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(c.APIVersion, c.Kind)
 }
 
-// GroupVersionKind returns the GroupVersionKind of the composite reference.
+// GroupVersionKind returns the GroupVersionKind of the managed reference.
 func (c *Composite) GroupVersionKind() schema.GroupVersionKind {
 	return schema.FromAPIVersionAndKind(c.APIVersion, c.Kind)
 }

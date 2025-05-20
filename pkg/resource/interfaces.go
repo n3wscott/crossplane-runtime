@@ -138,8 +138,8 @@ type CompositionUpdater interface {
 	GetCompositionUpdatePolicy() *xpv1.UpdatePolicy
 }
 
-// A CompositeResourceDeleter creates a composite, and controls the policy
-// used to delete the composite.
+// A CompositeResourceDeleter creates a managed, and controls the policy
+// used to delete the managed.
 type CompositeResourceDeleter interface {
 	SetCompositeDeletePolicy(policy *xpv1.CompositeDeletePolicy)
 	GetCompositeDeletePolicy() *xpv1.CompositeDeletePolicy
@@ -151,7 +151,7 @@ type ComposedResourcesReferencer interface {
 	GetResourceReferences() []corev1.ObjectReference
 }
 
-// A CompositeResourceReferencer can reference a composite resource.
+// A CompositeResourceReferencer can reference a managed resource.
 type CompositeResourceReferencer interface {
 	SetResourceReference(r *reference.Composite)
 	GetResourceReference() *reference.Composite

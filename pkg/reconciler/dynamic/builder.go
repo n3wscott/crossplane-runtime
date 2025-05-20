@@ -16,7 +16,7 @@ package dynamic
 
 import (
 	"context"
-	"fmt"
+	"time"
 
 	"github.com/crossplane/crossplane-runtime/pkg/errors"
 	"github.com/crossplane/crossplane-runtime/pkg/event"
@@ -27,29 +27,28 @@ import (
 
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 // ManagedBuilder builds controllers for managed.Unstructured resources.
 // It provides a fluent API similar to controller-runtime's Builder.
 type ManagedBuilder struct {
-	name                   string
-	gvks                   []schema.GroupVersionKind
-	mgr                    ctrl.Manager
+	name                    string
+	gvks                    []schema.GroupVersionKind
+	mgr                     ctrl.Manager
 	maxConcurrentReconciles int
-	predicates             []predicate.Predicate
-	log                    logging.Logger
+	predicates              []predicate.Predicate
+	log                     logging.Logger
 }
 
 // ManagedOption is used to configure a ManagedBuilder.
 type ManagedOption func(*ManagedBuilder)
 
-// WithLogger sets the logger for the ManagedBuilder.
-func WithLogger(log logging.Logger) ManagedOption {
+// WithBuilderLogger sets the logger for the ManagedBuilder.
+func WithBuilderLogger(log logging.Logger) ManagedOption {
 	return func(b *ManagedBuilder) {
 		b.log = log
 	}
@@ -65,9 +64,9 @@ func WithPredicates(p ...predicate.Predicate) ManagedOption {
 // NewManagedBuilder creates a new ManagedBuilder.
 func NewManagedBuilder(mgr ctrl.Manager, opts ...ManagedOption) *ManagedBuilder {
 	b := &ManagedBuilder{
-		mgr:                    mgr,
+		mgr:                     mgr,
 		maxConcurrentReconciles: 1,
-		log:                    logging.NewNopLogger(),
+		log:                     logging.NewNopLogger(),
 	}
 
 	for _, o := range opts {
@@ -105,6 +104,7 @@ func (b *ManagedBuilder) Complete(r reconcile.Reconciler) error {
 		return errors.New("must specify at least one GroupVersionKind to watch")
 	}
 
+	// Create a new controller
 	ctrl, err := controller.New(b.name, b.mgr, controller.Options{
 		Reconciler:              r,
 		MaxConcurrentReconciles: b.maxConcurrentReconciles,
@@ -115,38 +115,34 @@ func (b *ManagedBuilder) Complete(r reconcile.Reconciler) error {
 
 	// Set up watches for all GVKs
 	for _, gvk := range b.gvks {
-		obj := managedpkg.New(managedpkg.WithGroupVersionKind(gvk))
-		
-		// Set up watch for this GVK
-		if err := ctrl.Watch(
-			&source.Kind{Type: obj},
-			&handler.EnqueueRequestForObject{},
-			b.predicates...,
-		); err != nil {
-			return errors.Wrapf(err, "failed to watch GVK %s", gvk.String())
+		// Create a watch source using informer directly
+		inf, err := b.getInformerForGVK(gvk)
+		if err != nil {
+			return errors.Wrapf(err, "failed to get informer for GVK %s", gvk.String())
 		}
-		
+
+		// Create a source that can be stopped
+		src := NewStoppableSource(
+			inf,
+			&EnqueueRequestForManagedObject{},
+			b.predicates...,
+		)
+
+		// Add the source to the controller
+		if err := ctrl.Watch(src); err != nil {
+			return errors.Wrapf(err, "failed to add watch for GVK %s", gvk.String())
+		}
+
 		b.log.Debug("Added watch for GVK", "controller", b.name, "gvk", gvk.String())
 	}
 
 	return nil
 }
 
-// BuildAndSetupWithManager builds and registers the controller with the manager.
-func (b *ManagedBuilder) BuildAndSetupWithManager(r managed.Reconciler) error {
-	return b.Complete(r)
-}
-
-// GVKWatcher watches resources by GVK.
-type GVKWatcher struct {
-	gvk     schema.GroupVersionKind
-	handler handler.EventHandler
-}
-
-// Start starts the watcher.
-func (w *GVKWatcher) Start(ctx context.Context, handler reconcile.Reconciler) error {
-	// To be implemented
-	return nil
+// getInformerForGVK gets an informer for the specified GVK from the manager's cache.
+func (b *ManagedBuilder) getInformerForGVK(gvk schema.GroupVersionKind) (cache.Informer, error) {
+	// Get the informer from the manager's cache
+	return b.mgr.GetCache().GetInformerForKind(context.Background(), gvk)
 }
 
 // ManagedReconcilerBuilder builds a managed.Reconciler and its controller.
@@ -154,7 +150,7 @@ type ManagedReconcilerBuilder struct {
 	builder      *ManagedBuilder
 	mgr          ctrl.Manager
 	forKind      schema.GroupVersionKind
-	pollInterval resource.ManagedConnectionPollDuration
+	pollInterval time.Duration
 	logger       logging.Logger
 	connecter    managed.ExternalConnecter
 	recorder     event.Recorder
@@ -163,10 +159,10 @@ type ManagedReconcilerBuilder struct {
 // NewManagedReconcilerBuilder creates a new ManagedReconcilerBuilder.
 func NewManagedReconcilerBuilder(mgr ctrl.Manager, gvk schema.GroupVersionKind) *ManagedReconcilerBuilder {
 	return &ManagedReconcilerBuilder{
-		builder:   NewManagedBuilder(mgr),
-		mgr:       mgr,
-		forKind:   gvk,
-		logger:    logging.NewNopLogger(),
+		builder: NewManagedBuilder(mgr),
+		mgr:     mgr,
+		forKind: gvk,
+		logger:  logging.NewNopLogger(),
 	}
 }
 
@@ -189,7 +185,7 @@ func (b *ManagedReconcilerBuilder) WithConnector(c managed.ExternalConnecter) *M
 }
 
 // WithPollInterval sets the polling interval for the ManagedReconcilerBuilder.
-func (b *ManagedReconcilerBuilder) WithPollInterval(d resource.ManagedConnectionPollDuration) *ManagedReconcilerBuilder {
+func (b *ManagedReconcilerBuilder) WithPollInterval(d time.Duration) *ManagedReconcilerBuilder {
 	b.pollInterval = d
 	return b
 }
@@ -229,5 +225,5 @@ func (b *ManagedReconcilerBuilder) Build() error {
 
 	return b.builder.
 		ForKind(b.forKind).
-		BuildAndSetupWithManager(r)
+		Complete(r)
 }

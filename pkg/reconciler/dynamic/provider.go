@@ -190,8 +190,8 @@ func (p *Provider) setupResourceController(mgr ctrl.Manager, rt ResourceType) er
 	)
 
 	// Use our custom builder instead of controller-runtime's builder
-	builder := NewManagedBuilder(mgr, WithLogger(p.log.WithValues("builder", name)))
-	
+	builder := NewManagedBuilder(mgr, WithBuilderLogger(p.log.WithValues("builder", name)))
+
 	if err := builder.
 		Named(name).
 		ForKind(gvk).

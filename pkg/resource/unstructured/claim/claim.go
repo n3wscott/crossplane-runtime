@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package claim contains an unstructured composite resource claim.
+// Package claim contains an unstructured managed resource claim.
 package claim
 
 import (
@@ -28,10 +28,10 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/resource/unstructured/reference"
 )
 
-// An Option modifies an unstructured composite resource claim.
+// An Option modifies an unstructured managed resource claim.
 type Option func(*Unstructured)
 
-// WithGroupVersionKind sets the GroupVersionKind of the unstructured composite
+// WithGroupVersionKind sets the GroupVersionKind of the unstructured managed
 // resource claim.
 func WithGroupVersionKind(gvk schema.GroupVersionKind) Option {
 	return func(c *Unstructured) {
@@ -40,14 +40,14 @@ func WithGroupVersionKind(gvk schema.GroupVersionKind) Option {
 }
 
 // WithConditions returns an Option that sets the supplied conditions on an
-// unstructured composite resource claim.
+// unstructured managed resource claim.
 func WithConditions(c ...xpv1.Condition) Option {
 	return func(cr *Unstructured) {
 		cr.SetConditions(c...)
 	}
 }
 
-// New returns a new unstructured composite resource claim.
+// New returns a new unstructured managed resource claim.
 func New(opts ...Option) *Unstructured {
 	c := &Unstructured{Unstructured: unstructured.Unstructured{Object: make(map[string]any)}}
 	for _, f := range opts {
@@ -59,7 +59,7 @@ func New(opts ...Option) *Unstructured {
 // +k8s:deepcopy-gen=true
 // +kubebuilder:object:root=true
 
-// An Unstructured composite resource claim.
+// An Unstructured managed resource claim.
 type Unstructured struct {
 	unstructured.Unstructured
 }
@@ -69,7 +69,7 @@ func (c *Unstructured) GetUnstructured() *unstructured.Unstructured {
 	return &c.Unstructured
 }
 
-// GetCompositionSelector of this composite resource claim.
+// GetCompositionSelector of this managed resource claim.
 func (c *Unstructured) GetCompositionSelector() *metav1.LabelSelector {
 	out := &metav1.LabelSelector{}
 	if err := fieldpath.Pave(c.Object).GetValueInto("spec.compositionSelector", out); err != nil {
@@ -78,12 +78,12 @@ func (c *Unstructured) GetCompositionSelector() *metav1.LabelSelector {
 	return out
 }
 
-// SetCompositionSelector of this composite resource claim.
+// SetCompositionSelector of this managed resource claim.
 func (c *Unstructured) SetCompositionSelector(sel *metav1.LabelSelector) {
 	_ = fieldpath.Pave(c.Object).SetValue("spec.compositionSelector", sel)
 }
 
-// GetCompositionReference of this composite resource claim.
+// GetCompositionReference of this managed resource claim.
 func (c *Unstructured) GetCompositionReference() *corev1.ObjectReference {
 	out := &corev1.ObjectReference{}
 	if err := fieldpath.Pave(c.Object).GetValueInto("spec.compositionRef", out); err != nil {
@@ -92,7 +92,7 @@ func (c *Unstructured) GetCompositionReference() *corev1.ObjectReference {
 	return out
 }
 
-// SetCompositionReference of this composite resource claim.
+// SetCompositionReference of this managed resource claim.
 func (c *Unstructured) SetCompositionReference(ref *corev1.ObjectReference) {
 	_ = fieldpath.Pave(c.Object).SetValue("spec.compositionRef", ref)
 }
@@ -155,7 +155,7 @@ func (c *Unstructured) GetCompositeDeletePolicy() *xpv1.CompositeDeletePolicy {
 	return &out
 }
 
-// GetResourceReference of this composite resource claim.
+// GetResourceReference of this managed resource claim.
 func (c *Unstructured) GetResourceReference() *reference.Composite {
 	out := &reference.Composite{}
 	if err := fieldpath.Pave(c.Object).GetValueInto("spec.resourceRef", out); err != nil {
@@ -164,7 +164,7 @@ func (c *Unstructured) GetResourceReference() *reference.Composite {
 	return out
 }
 
-// SetResourceReference of this composite resource claim.
+// SetResourceReference of this managed resource claim.
 func (c *Unstructured) SetResourceReference(ref *reference.Composite) {
 	_ = fieldpath.Pave(c.Object).SetValue("spec.resourceRef", ref)
 }
@@ -179,7 +179,7 @@ func (c *Unstructured) GetReference() *reference.Claim {
 	}
 }
 
-// GetWriteConnectionSecretToReference of this composite resource claim.
+// GetWriteConnectionSecretToReference of this managed resource claim.
 func (c *Unstructured) GetWriteConnectionSecretToReference() *xpv1.LocalSecretReference {
 	out := &xpv1.LocalSecretReference{}
 	if err := fieldpath.Pave(c.Object).GetValueInto("spec.writeConnectionSecretToRef", out); err != nil {
@@ -188,12 +188,12 @@ func (c *Unstructured) GetWriteConnectionSecretToReference() *xpv1.LocalSecretRe
 	return out
 }
 
-// SetWriteConnectionSecretToReference of this composite resource claim.
+// SetWriteConnectionSecretToReference of this managed resource claim.
 func (c *Unstructured) SetWriteConnectionSecretToReference(ref *xpv1.LocalSecretReference) {
 	_ = fieldpath.Pave(c.Object).SetValue("spec.writeConnectionSecretToRef", ref)
 }
 
-// GetPublishConnectionDetailsTo of this composite resource claim.
+// GetPublishConnectionDetailsTo of this managed resource claim.
 func (c *Unstructured) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDetailsTo {
 	out := &xpv1.PublishConnectionDetailsTo{}
 	if err := fieldpath.Pave(c.Object).GetValueInto("spec.publishConnectionDetailsTo", out); err != nil {
@@ -202,12 +202,12 @@ func (c *Unstructured) GetPublishConnectionDetailsTo() *xpv1.PublishConnectionDe
 	return out
 }
 
-// SetPublishConnectionDetailsTo of this composite resource claim.
+// SetPublishConnectionDetailsTo of this managed resource claim.
 func (c *Unstructured) SetPublishConnectionDetailsTo(ref *xpv1.PublishConnectionDetailsTo) {
 	_ = fieldpath.Pave(c.Object).SetValue("spec.publishConnectionDetailsTo", ref)
 }
 
-// GetCondition of this composite resource claim.
+// GetCondition of this managed resource claim.
 func (c *Unstructured) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
 	conditioned := xpv1.ConditionedStatus{}
 	// The path is directly `status` because conditions are inline.
@@ -217,7 +217,7 @@ func (c *Unstructured) GetCondition(ct xpv1.ConditionType) xpv1.Condition {
 	return conditioned.GetCondition(ct)
 }
 
-// SetConditions of this composite resource claim.
+// SetConditions of this managed resource claim.
 func (c *Unstructured) SetConditions(conditions ...xpv1.Condition) {
 	conditioned := xpv1.ConditionedStatus{}
 	// The path is directly `status` because conditions are inline.
@@ -226,7 +226,7 @@ func (c *Unstructured) SetConditions(conditions ...xpv1.Condition) {
 	_ = fieldpath.Pave(c.Object).SetValue("status.conditions", conditioned.Conditions)
 }
 
-// GetConnectionDetailsLastPublishedTime of this composite resource claim.
+// GetConnectionDetailsLastPublishedTime of this managed resource claim.
 func (c *Unstructured) GetConnectionDetailsLastPublishedTime() *metav1.Time {
 	out := &metav1.Time{}
 	if err := fieldpath.Pave(c.Object).GetValueInto("status.connectionDetails.lastPublishedTime", out); err != nil {
@@ -235,12 +235,12 @@ func (c *Unstructured) GetConnectionDetailsLastPublishedTime() *metav1.Time {
 	return out
 }
 
-// SetConnectionDetailsLastPublishedTime of this composite resource claim.
+// SetConnectionDetailsLastPublishedTime of this managed resource claim.
 func (c *Unstructured) SetConnectionDetailsLastPublishedTime(t *metav1.Time) {
 	_ = fieldpath.Pave(c.Object).SetValue("status.connectionDetails.lastPublishedTime", t)
 }
 
-// SetObservedGeneration of this composite resource claim.
+// SetObservedGeneration of this managed resource claim.
 func (c *Unstructured) SetObservedGeneration(generation int64) {
 	status := &xpv1.ObservedStatus{}
 	_ = fieldpath.Pave(c.Object).GetValueInto("status", status)
@@ -248,7 +248,7 @@ func (c *Unstructured) SetObservedGeneration(generation int64) {
 	_ = fieldpath.Pave(c.Object).SetValue("status.observedGeneration", status.ObservedGeneration)
 }
 
-// GetObservedGeneration of this composite resource claim.
+// GetObservedGeneration of this managed resource claim.
 func (c *Unstructured) GetObservedGeneration() int64 {
 	status := &xpv1.ObservedStatus{}
 	_ = fieldpath.Pave(c.Object).GetValueInto("status", status)

@@ -169,7 +169,7 @@ func (cr *UnstructuredList) GetUnstructuredList() *unstructured.UnstructuredList
 	return &cr.UnstructuredList
 }
 
-// SetObservedGeneration of this composite resource claim.
+// SetObservedGeneration of this managed resource claim.
 func (cr *Unstructured) SetObservedGeneration(generation int64) {
 	status := &xpv1.ObservedStatus{}
 	_ = fieldpath.Pave(cr.Object).GetValueInto("status", status)
@@ -177,7 +177,7 @@ func (cr *Unstructured) SetObservedGeneration(generation int64) {
 	_ = fieldpath.Pave(cr.Object).SetValue("status.observedGeneration", status.ObservedGeneration)
 }
 
-// GetObservedGeneration of this composite resource claim.
+// GetObservedGeneration of this managed resource claim.
 func (cr *Unstructured) GetObservedGeneration() int64 {
 	status := &xpv1.ObservedStatus{}
 	_ = fieldpath.Pave(cr.Object).GetValueInto("status", status)

@@ -238,10 +238,10 @@ func (m *CompositeResourceDeleter) GetCompositeDeletePolicy() *xpv1.CompositeDel
 // CompositeResourceReferencer is a mock that implements CompositeResourceReferencer interface.
 type CompositeResourceReferencer struct{ Ref *reference.Composite }
 
-// SetResourceReference sets the composite resource reference.
+// SetResourceReference sets the managed resource reference.
 func (m *CompositeResourceReferencer) SetResourceReference(p *reference.Composite) { m.Ref = p }
 
-// GetResourceReference gets the composite resource reference.
+// GetResourceReference gets the managed resource reference.
 func (m *CompositeResourceReferencer) GetResourceReference() *reference.Composite { return m.Ref }
 
 // ComposedResourcesReferencer is a mock that implements ComposedResourcesReferencer interface.

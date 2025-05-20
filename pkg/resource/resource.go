@@ -59,10 +59,10 @@ const (
 // A ManagedKind contains the type metadata for a kind of managed resource.
 type ManagedKind schema.GroupVersionKind
 
-// A CompositeKind contains the type metadata for a kind of composite resource.
+// A CompositeKind contains the type metadata for a kind of managed resource.
 type CompositeKind schema.GroupVersionKind
 
-// A CompositeClaimKind contains the type metadata for a kind of composite
+// A CompositeClaimKind contains the type metadata for a kind of managed
 // resource claim.
 type CompositeClaimKind schema.GroupVersionKind
 
