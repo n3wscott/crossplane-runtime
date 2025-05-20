@@ -15,7 +15,6 @@ package main
 
 import (
 	"flag"
-	dynamic2 "github.com/crossplane/crossplane-runtime/pkg/controller/managed"
 	"os"
 	"time"
 
@@ -23,6 +22,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	"github.com/crossplane/crossplane-runtime/pkg/controller/managed"
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 )
 
@@ -59,54 +59,41 @@ func main() {
 	zapLogger := logging.NewLogrLogger(ctrl.Log.WithName("managed-reconciler"))
 
 	// Load configuration
-	var config dynamic2.DynamicControllerConfig
+	var config managed.DynamicControllerConfig
 	var err error
 
 	if configPath != "" {
 		// Load config from file
-		config, err = dynamic2.LoadConfigFromFile(configPath)
+		config, err = managed.LoadConfigFromFile(configPath)
 		if err != nil {
 			setupLog.Error(err, "unable to load configuration from file")
 			os.Exit(1)
 		}
 	} else if providerEndpoint != "" {
 		// Create config from endpoint
-		config = dynamic2.CreateConfigFromEndpoint(providerEndpoint)
+		config = managed.CreateConfigFromEndpoint(providerEndpoint)
 	} else {
 		setupLog.Error(nil, "either --config or --provider-endpoint must be specified")
 		os.Exit(1)
 	}
 
 	// Validate config
-	if err := dynamic2.ValidateConfig(config); err != nil {
+	if err := managed.ValidateConfig(config); err != nil {
 		setupLog.Error(err, "invalid configuration")
 		os.Exit(1)
 	}
 
 	// Create controller builder
-	builder := dynamic2.NewDynamicControllerBuilder(config,
-		dynamic2.WithLogger(zapLogger),
-		dynamic2.WithMetricsAddress(metricsAddr),
-		dynamic2.WithHealthProbeAddress(probeAddr),
-		dynamic2.WithLeaderElection(leaderElection),
-		dynamic2.WithPollInterval(pollInterval),
-		dynamic2.WithMaxReconcileRate(maxReconcileRate),
+	controller := managed.NewController(config,
+		managed.WithLogger(zapLogger),
+		managed.WithMetricsAddress(metricsAddr),
+		managed.WithHealthProbeAddress(probeAddr),
+		managed.WithLeaderElection(leaderElection),
+		managed.WithPollInterval(pollInterval),
+		managed.WithMaxReconcileRate(maxReconcileRate),
 	)
 
 	ctx := ctrl.SetupSignalHandler()
-
-	// Build the controller
-	controller, err := builder.Build(ctx)
-	if err != nil {
-		setupLog.Error(err, "unable to build controller")
-		os.Exit(1)
-	}
-
-	// Setup the controller
-	if err := controller.Setup(ctx); err != nil {
-		setupLog.Error(err, "unable to setup controller")
-		os.Exit(1)
-	}
 
 	// Start the controller
 	if err := controller.Start(ctx); err != nil {

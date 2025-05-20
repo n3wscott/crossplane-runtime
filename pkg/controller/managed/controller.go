@@ -29,59 +29,53 @@ import (
 	"github.com/crossplane/crossplane-runtime/pkg/logging"
 )
 
-// DynamicControllerManager is an interface for managing managed controllers.
-type DynamicControllerManager interface {
-	// Start begins running the controllers.
-	Start(ctx context.Context) error
-}
-
-// ControllerOption configures a DynamicControllerBuilder.
-type ControllerOption func(*DynamicControllerBuilder)
+// ControllerOption configures a Controller.
+type ControllerOption func(*Controller)
 
 // WithMetricsAddress sets the address for the metrics server.
 func WithMetricsAddress(addr string) ControllerOption {
-	return func(b *DynamicControllerBuilder) {
+	return func(b *Controller) {
 		b.metricsAddr = addr
 	}
 }
 
 // WithHealthProbeAddress sets the address for the health probe server.
 func WithHealthProbeAddress(addr string) ControllerOption {
-	return func(b *DynamicControllerBuilder) {
+	return func(b *Controller) {
 		b.probeAddr = addr
 	}
 }
 
 // WithLeaderElection enables or disables leader election.
 func WithLeaderElection(enabled bool) ControllerOption {
-	return func(b *DynamicControllerBuilder) {
+	return func(b *Controller) {
 		b.leaderElection = enabled
 	}
 }
 
 // WithPollInterval sets the polling interval for all reconcilers.
 func WithPollInterval(d time.Duration) ControllerOption {
-	return func(b *DynamicControllerBuilder) {
+	return func(b *Controller) {
 		b.pollInterval = d
 	}
 }
 
 // WithMaxReconcileRate sets the maximum reconciliation rate.
 func WithMaxReconcileRate(rate int) ControllerOption {
-	return func(b *DynamicControllerBuilder) {
+	return func(b *Controller) {
 		b.maxReconcileRate = rate
 	}
 }
 
 // WithLogger sets the logger for the controller.
 func WithLogger(log logging.Logger) ControllerOption {
-	return func(b *DynamicControllerBuilder) {
+	return func(b *Controller) {
 		b.log = log
 	}
 }
 
-// DynamicControllerBuilder builds a DynamicControllerManager.
-type DynamicControllerBuilder struct {
+// Controller builds a DynamicControllerManager.
+type Controller struct {
 	config           DynamicControllerConfig
 	log              logging.Logger
 	metricsAddr      string
@@ -90,11 +84,13 @@ type DynamicControllerBuilder struct {
 	pollInterval     time.Duration
 	maxReconcileRate int
 	engine           engine.IControllerEngine
+	manager          ctrl.Manager
+	providers        []*Provider
 }
 
-// NewDynamicControllerBuilder creates a new DynamicControllerBuilder.
-func NewDynamicControllerBuilder(config DynamicControllerConfig, opts ...ControllerOption) *DynamicControllerBuilder {
-	b := &DynamicControllerBuilder{
+// NewController creates a new Controller.
+func NewController(config DynamicControllerConfig, opts ...ControllerOption) *Controller {
+	b := &Controller{
 		config:           config,
 		log:              logging.NewNopLogger(),
 		metricsAddr:      ":8080",
@@ -111,15 +107,13 @@ func NewDynamicControllerBuilder(config DynamicControllerConfig, opts ...Control
 	return b
 }
 
-// Build creates a DynamicControllerManager from the builder.
-func (b *DynamicControllerBuilder) Build(ctx context.Context) (DynamicControllerManager, error) {
+// Start creates and starts all the providers and a controller runtime manager.
+func (b *Controller) Start(ctx context.Context) error {
 	// Initialize a new scheme
 	scheme := runtime.NewScheme()
 	if err := clientgoscheme.AddToScheme(scheme); err != nil {
-		return nil, errors.Wrap(err, "cannot add kubernetes client-go scheme")
+		return errors.Wrap(err, "cannot add kubernetes client-go scheme")
 	}
-
-	// TODO: here we need to link the scheme of out known GKVs to the types if it is not done elsewhere.
 
 	// Create a manager
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
@@ -132,23 +126,23 @@ func (b *DynamicControllerBuilder) Build(ctx context.Context) (DynamicController
 		LeaderElectionID:       "managed-reconciler-leader-election",
 	})
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to create controller manager")
+		return errors.Wrap(err, "unable to create controller manager")
 	}
 
 	// Setup health checks
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		return nil, errors.Wrap(err, "unable to set up health check")
+		return errors.Wrap(err, "unable to set up health check")
 	}
 	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		return nil, errors.Wrap(err, "unable to set up ready check")
+		return errors.Wrap(err, "unable to set up ready check")
 	}
 
 	if b.engine, err = engine.NewEngineFromManager(ctx, mgr, b.log); err != nil {
-		return nil, errors.Wrap(err, "unable to create engine")
+		return errors.Wrap(err, "unable to create engine")
 	}
 
 	// Create providers for each provider config
-	var providers []*Provider
+	b.providers = make([]*Provider, 0, len(b.config.Providers))
 	for _, pc := range b.config.Providers {
 		provider, err := NewProvider(pc,
 			WithProviderLogger(b.log.WithValues("provider", pc.Name)),
@@ -156,44 +150,22 @@ func (b *DynamicControllerBuilder) Build(ctx context.Context) (DynamicController
 			WithProviderMaxReconcileRate(b.maxReconcileRate),
 		)
 		if err != nil {
-			return nil, errors.Wrapf(err, "cannot create provider %s", pc.Name)
+			return errors.Wrapf(err, "cannot create provider %s", pc.Name)
 		}
-		providers = append(providers, provider)
+		b.providers = append(b.providers, provider)
 	}
 
-	dc := &DynamicController{
-		manager:   mgr,
-		engine:    b.engine,
-		providers: providers,
-		log:       b.log,
-	}
+	// Store the manager for provider setup
+	b.manager = mgr
 
-	return dc, dc.Setup(ctx)
-}
-
-// DynamicController implements DynamicControllerManager.
-type DynamicController struct {
-	manager   ctrl.Manager
-	engine    engine.IControllerEngine
-	providers []*Provider
-	log       logging.Logger
-}
-
-// Setup prepares all controllers and their manager.
-func (c *DynamicController) Setup(ctx context.Context) error {
-	// Set up providers with the manager
-	for _, provider := range c.providers {
-		if err := provider.Setup(ctx, c.engine, c.manager); err != nil {
+	// Set up providers with the manager and engine
+	for _, provider := range b.providers {
+		if err := provider.Setup(ctx, b.engine, b.manager); err != nil {
 			return errors.Wrapf(err, "cannot set up provider %s", provider.config.Name)
 		}
 	}
-	return nil
-}
 
-// Start begins running the controllers.
-func (c *DynamicController) Start(ctx context.Context) error {
 	setupLog := log.Log.WithName("setup")
 	setupLog.Info("starting manager")
-
-	return c.manager.Start(ctx)
+	return b.manager.Start(ctx)
 }

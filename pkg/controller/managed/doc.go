@@ -41,7 +41,7 @@ or as a library in other Go programs:
 	config := managed.DynamicControllerConfig{...}
 
 	// Build a controller
-	builder := managed.NewDynamicControllerBuilder(config)
+	builder := managed.New(config)
 	controller, _ := builder.Build()
 
 	// Setup and start

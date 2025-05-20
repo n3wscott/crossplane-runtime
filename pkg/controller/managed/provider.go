@@ -122,11 +122,11 @@ func (p *Provider) Setup(ctx context.Context, eng engine.IControllerEngine, mgr 
 	}))
 
 	// Connect to the provider and discover available resource types
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	disCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	// Call Discover to determine the types that should be reconciled dynamically
-	discoveredTypes, err := p.connector.Discover(ctx)
+	discoveredTypes, err := p.connector.Discover(disCtx)
 	if err != nil {
 		p.log.Info("Failed to discover resource types from provider", "error", err)
 	} else if len(discoveredTypes) > 0 {
